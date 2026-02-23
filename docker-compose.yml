@@ -1,0 +1,18 @@
+# Base SQL locale pour tests (en attendant OVH)
+# Usage : docker compose up -d
+# Puis : init_db.sql + npm run seed (dans backend/)
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: abrazouver_apel
+      MYSQL_USER: abrazouver
+      MYSQL_PASSWORD: abrazouver
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
