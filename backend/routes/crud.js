@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
 
-const RESERVED_TABLES = ['auth', 'health', '2fa'];
+const RESERVED_TABLES = ['auth', 'admin', 'health', '2fa', 'postes', 'creneaux'];
 
 function sanitizeTable(table) {
   return table.replace(/[^a-z0-9_]/gi, '');
@@ -49,11 +49,19 @@ router.post('/:table', async (req, res) => {
   try {
     const table = req.params.table.replace(/[^a-z0-9_]/gi, '');
     if (isReserved(table)) {
-      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
+      return res.status(400).json({
+        message: table === 'postes'
+          ? "Utilisez POST /api/admin/postes pour créer un poste avec créneaux."
+          : `"${table}" n'est pas une table CRUD.`,
+      });
     }
     if (!table) return res.status(400).json({ message: 'Table invalide' });
     const pool = await getPool();
-    const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
+    const body = { ...req.body };
+    Object.keys(body).forEach((k) => {
+      if (typeof body[k] === 'object' && body[k] !== null) delete body[k];
+    });
+    const data = { ...body, created_at: new Date(), updated_at: new Date() };
     const fields = Object.keys(data);
     const placeholders = fields.map(() => '?').join(', ');
     const [result] = await pool.query(
