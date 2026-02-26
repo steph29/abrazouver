@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../api/session_service.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
 import 'accueil_page.dart';
@@ -81,15 +82,18 @@ class _MainAppControllerState extends State<MainAppController> {
     return adminPages[index - compteIndex - 1];
   }
 
-  void _navigate(int index) {
+  void _navigate(int index, {bool closeDrawer = false}) {
     setState(() {
       _selectedIndex = index;
       _currentTitle = _allItems[index].title;
     });
-    Navigator.pop(context);
+    if (closeDrawer) {
+      Navigator.pop(context);
+    }
   }
 
   void _logout() {
+    SessionService.clearUser();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
@@ -144,7 +148,7 @@ class _MainAppControllerState extends State<MainAppController> {
               ),
             ),
             selected: _selectedIndex == i,
-            onTap: () => _navigate(i),
+            onTap: () => _navigate(i, closeDrawer: true),
           );
         }),
         const Divider(),
@@ -174,12 +178,11 @@ class _MainAppControllerState extends State<MainAppController> {
                 ),
               ),
         actions: [
-          if (!useRail)
-            IconButton(
-              icon: const Icon(Icons.logout_rounded),
-              onPressed: _logout,
-              tooltip: 'Déconnexion',
-            ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: _logout,
+            tooltip: 'Déconnexion',
+          ),
         ],
       ),
       drawer: useRail
@@ -193,6 +196,30 @@ class _MainAppControllerState extends State<MainAppController> {
           if (useRail)
             NavigationRail(
               extended: MediaQuery.of(context).size.width >= 800,
+              trailing: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: _logout,
+                      icon: const Icon(Icons.logout_rounded),
+                      tooltip: 'Déconnexion',
+                      style: IconButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                    ),
+                    if (MediaQuery.of(context).size.width >= 800)
+                      const Text(
+                        'Déconnexion',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               leading: Padding(
                 padding: const EdgeInsets.only(top: 16, bottom: 8),
                 child: Column(
@@ -224,7 +251,7 @@ class _MainAppControllerState extends State<MainAppController> {
                 ),
               ),
               selectedIndex: _selectedIndex,
-              onDestinationSelected: _navigate,
+              onDestinationSelected: (i) => _navigate(i),
               destinations: [
                 ..._mainItems.map((e) => NavigationRailDestination(
                       icon: Icon(e.icon),

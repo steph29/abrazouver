@@ -2,15 +2,24 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
 
+const RESERVED_TABLES = ['auth', 'health', '2fa'];
+
 function sanitizeTable(table) {
   return table.replace(/[^a-z0-9_]/gi, '');
 }
 
+function isReserved(table) {
+  return RESERVED_TABLES.includes(table?.toLowerCase());
+}
+
 router.get('/:table', async (req, res) => {
   try {
-    const pool = await getPool();
     const table = sanitizeTable(req.params.table);
     if (!table) return res.status(400).json({ message: 'Table invalide' });
+    if (isReserved(table)) {
+      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD. Utilisez /api/auth/* pour l'authentification.` });
+    }
+    const pool = await getPool();
     const [rows] = await pool.query(`SELECT * FROM \`${table}\``);
     res.json({ data: rows });
   } catch (err) {
@@ -38,9 +47,12 @@ router.get('/:table/:id', async (req, res) => {
 
 router.post('/:table', async (req, res) => {
   try {
-    const pool = await getPool();
     const table = req.params.table.replace(/[^a-z0-9_]/gi, '');
+    if (isReserved(table)) {
+      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
+    }
     if (!table) return res.status(400).json({ message: 'Table invalide' });
+    const pool = await getPool();
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
     const fields = Object.keys(data);
     const placeholders = fields.map(() => '?').join(', ');
@@ -78,9 +90,12 @@ router.put('/:table/:id', async (req, res) => {
 
 router.delete('/:table/:id', async (req, res) => {
   try {
-    const pool = await getPool();
     const table = sanitizeTable(req.params.table);
+    if (isReserved(table)) {
+      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
+    }
     if (!table) return res.status(400).json({ message: 'Table invalide' });
+    const pool = await getPool();
     const [result] = await pool.query(
       `DELETE FROM \`${table}\` WHERE id = ?`,
       [req.params.id]

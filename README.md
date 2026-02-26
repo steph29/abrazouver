@@ -50,18 +50,23 @@ L'API est disponible sur `http://localhost:3000`.
 
 ### Déploiement web
 
-1. **Modifier `web/config.json`** avant le build :
+1. **API en HTTPS** (obligatoire si le site est en HTTPS, sinon erreur "contenu mixte") :
+   - Créer un sous-domaine DNS (ex. `api.votresite.com`) pointant vers l'IP du VPS
+   - Sur le VPS : Nginx + certificat Let's Encrypt (voir `backend/deploy/nginx-api.conf.example`)
+   - L'API sera accessible en `https://api.votresite.com`
+
+2. **Modifier `web/config.json`** avant le build :
    ```json
-   { "apiBaseUrl": "https://votre-serveur-api.com/api" }
+   { "apiBaseUrl": "https://api.votresite.com/api" }
    ```
 
-2. **Builder** : `flutter build web`
+3. **Builder** : `flutter build web`
 
-3. **Déployer** le contenu de `build/web/` sur votre hébergement.
+4. **Déployer** le contenu de `build/web/` sur votre hébergement.
 
-4. **Backend** : déployer aussi le backend et configurer CORS dans `.env` :
+5. **Backend** : configurer CORS dans `.env` :
    ```
-   CORS_ORIGINS=https://votresite.com
+   CORS_ORIGINS=https://votresite.com,https://www.votresite.com
    ```
 
 ### Base de données SQL (OVH)
@@ -72,7 +77,7 @@ L'API est disponible sur `http://localhost:3000`.
    - `DB_USER` : nom d'utilisateur
    - `DB_PASSWORD` : mot de passe OVH
    - `DB_NAME` : nom de la base
-3. Créez les tables : exécutez `backend/scripts/init_db_ovh.sql` dans phpMyAdmin OVH, ou `npm run init-db` si la base est déjà configurée.
+3. Créez la base `abrazouver_apel` dans le manager OVH (Cloud DB). Les tables sont créées automatiquement au premier démarrage du serveur. Pour désactiver : `AUTO_INIT_SCHEMA=false` dans `.env`.
 
 ### Test local (en attendant OVH)
 

@@ -20,10 +20,11 @@ async function init() {
   const sqlPath = path.join(__dirname, 'schema.sql');
   const sql = fs.readFileSync(sqlPath, 'utf8');
 
+  console.log(`Connexion à ${dbConfig.host}:${dbConfig.port} / ${dbConfig.database}...`);
   const conn = await mysql.createConnection(dbConfig);
   try {
     await conn.query(sql);
-    console.log('✅ Base et tables créées avec succès.');
+    console.log('✅ Tables créées avec succès sur cette base.');
   } catch (err) {
     console.error('❌ Erreur :', err.message);
     process.exit(1);

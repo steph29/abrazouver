@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/auth_service.dart';
+import '../api/session_service.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
 import 'main_app_controller.dart';
@@ -40,6 +41,8 @@ class _LoginPageState extends State<LoginPage> {
       final response = await AuthService.verify2FA(_tempToken2FA, code);
       if (!mounted) return;
       final user = User.fromJson(response);
+      await SessionService.saveUser(user);
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => MainAppController(user: user),
@@ -79,6 +82,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final user = User.fromJson(response);
+      await SessionService.saveUser(user);
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => MainAppController(user: user),
