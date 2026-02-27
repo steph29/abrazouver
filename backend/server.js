@@ -6,6 +6,7 @@ const { router: twofaRoutes } = require("./routes/twofa");
 const { postesReadRouter, postesAdminRouter } = require("./routes/postes");
 const { isAdmin } = require("./middleware/isAdmin");
 const inscriptionsRoutes = require("./routes/inscriptions");
+const preferencesRoutes = require("./routes/preferences");
 const crudRoutes = require("./routes/crud");
 const { getPool } = require("./config/database");
 
@@ -34,6 +35,7 @@ app.use("/api/postes", postesReadRouter);
 app.use("/api/admin/postes", isAdmin, postesAdminRouter);
 
 app.use("/api/benevoles/inscriptions", inscriptionsRoutes);
+app.use("/api/preferences", preferencesRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/2fa", twofaRoutes);
 app.use("/api", crudRoutes);

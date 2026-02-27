@@ -57,6 +57,19 @@ async function runMigration(options = {}) {
     conn = await mysql.createConnection(dbConfig);
   }
   try {
+    // Créer app_preferences en premier (résilient si schema.sql incomplet via FTP)
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS app_preferences (
+        pref_key VARCHAR(100) PRIMARY KEY,
+        pref_value TEXT
+      )
+    `);
+    await conn.query(`
+      INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
+        ('primaryColor', '#4CAF50'),
+        ('secondaryColor', '#2b5a72')
+    `);
+
     for (const stmt of statements) {
       if (!stmt) continue;
       try {

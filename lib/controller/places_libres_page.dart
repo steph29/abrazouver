@@ -161,8 +161,8 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
               child: TabBar(
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                indicatorColor: AppColors.primaryDark,
-                labelColor: AppColors.primaryDark,
+                indicatorColor: Theme.of(context).colorScheme.primaryContainer,
+                labelColor: Theme.of(context).colorScheme.primaryContainer,
                 unselectedLabelColor: AppColors.textSecondary,
                 tabs: days.map((d) => Tab(text: _formatDateShort(d))).toList(),
               ),
@@ -281,10 +281,10 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
                       ),
                       child: Text(
                         '${creneau.placesRestantes}/${creneau.nbBenevolesRequis}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
-                          color: AppColors.primaryDark,
+                          color: Theme.of(context).colorScheme.primaryContainer,
                         ),
                       ),
                     ),

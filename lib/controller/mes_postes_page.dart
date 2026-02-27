@@ -163,8 +163,8 @@ class _MesPostesPageState extends State<MesPostesPage> {
               child: TabBar(
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                indicatorColor: AppColors.primaryDark,
-                labelColor: AppColors.primaryDark,
+                indicatorColor: Theme.of(context).colorScheme.primaryContainer,
+                labelColor: Theme.of(context).colorScheme.primaryContainer,
                 unselectedLabelColor: AppColors.textSecondary,
                 tabs: days.map((d) => Tab(text: _formatDateShort(d))).toList(),
               ),

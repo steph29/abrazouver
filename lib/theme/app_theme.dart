@@ -10,13 +10,17 @@ class AppColors {
 }
 
 class AppTheme {
-  static ThemeData get lightTheme {
+  static ThemeData get lightTheme =>
+      buildTheme(AppColors.primary, AppColors.primaryDark);
+
+  /// Construit un thème à partir des couleurs principales
+  static ThemeData buildTheme(Color primaryColor, Color secondaryColor) {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.light(
-        primary: AppColors.primary,
+        primary: primaryColor,
         onPrimary: Colors.white,
-        primaryContainer: AppColors.primaryDark,
+        primaryContainer: secondaryColor,
         onPrimaryContainer: Colors.white,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
@@ -24,8 +28,8 @@ class AppTheme {
         outline: AppColors.textSecondary,
       ),
       scaffoldBackgroundColor: AppColors.background,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.primaryDark,
+      appBarTheme: AppBarTheme(
+        backgroundColor: secondaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -34,16 +38,16 @@ class AppTheme {
         backgroundColor: AppColors.surface,
         elevation: 8,
       ),
-      navigationRailTheme: const NavigationRailThemeData(
+      navigationRailTheme: NavigationRailThemeData(
         backgroundColor: AppColors.surface,
-        selectedIconTheme: IconThemeData(color: AppColors.primaryDark),
+        selectedIconTheme: IconThemeData(color: secondaryColor),
         unselectedIconTheme: IconThemeData(color: AppColors.textSecondary),
-        selectedLabelTextStyle: TextStyle(color: AppColors.primaryDark),
+        selectedLabelTextStyle: TextStyle(color: secondaryColor),
         unselectedLabelTextStyle: TextStyle(color: AppColors.textSecondary),
       ),
       listTileTheme: ListTileThemeData(
         textColor: AppColors.textPrimary,
-        iconColor: AppColors.primaryDark,
+        iconColor: secondaryColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -57,19 +61,19 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return AppColors.primaryDark;
+          if (states.contains(WidgetState.selected)) return secondaryColor;
           return null;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primaryDark.withValues(alpha: 0.5);
+            return secondaryColor.withValues(alpha: 0.5);
           }
           return null;
         }),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primaryDark,
+          backgroundColor: secondaryColor,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           shape: RoundedRectangleBorder(
@@ -82,7 +86,7 @@ class AppTheme {
         fillColor: AppColors.surface,
         border: const OutlineInputBorder(),
         focusedBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: AppColors.primaryDark, width: 2),
+          borderSide: BorderSide(color: secondaryColor, width: 2),
           borderRadius: BorderRadius.circular(8),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

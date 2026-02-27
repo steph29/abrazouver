@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../api/preferences_service.dart';
 import '../api/session_service.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
@@ -12,14 +13,16 @@ import 'login_page.dart';
 import 'mes_postes_page.dart';
 import 'notifications_page.dart';
 import 'places_libres_page.dart';
+import 'preferences_page.dart';
 
 const double _kDrawerWidth = 280;
 const double _kBreakpointTablet = 600;
 
 class MainAppController extends StatefulWidget {
   final User user;
+  final void Function(ThemeData theme) onThemeReady;
 
-  const MainAppController({super.key, required this.user});
+  const MainAppController({super.key, required this.user, required this.onThemeReady});
 
   @override
   State<MainAppController> createState() => _MainAppControllerState();
@@ -40,6 +43,7 @@ class _MainAppControllerState extends State<MainAppController> {
 
   final List<({String title, IconData icon})> _adminItems = [
     (title: 'Admin', icon: Icons.admin_panel_settings_rounded),
+    (title: 'Préférences', icon: Icons.palette_rounded),
     (title: 'Analyse', icon: Icons.analytics_rounded),
     (title: 'Notifications', icon: Icons.notifications_rounded),
   ];
@@ -54,6 +58,39 @@ class _MainAppControllerState extends State<MainAppController> {
   void initState() {
     super.initState();
     _user = widget.user;
+    _loadThemePreferences();
+  }
+
+  static bool _themePreferencesLoaded = false;
+
+  Future<void> _loadThemePreferences() async {
+    if (_themePreferencesLoaded) return;
+    try {
+      final prefs = await PreferencesService.get();
+      final primary = _parseColor(prefs['primaryColor']);
+      final secondary = _parseColor(prefs['secondaryColor']);
+      if (primary != null && secondary != null) {
+        _themePreferencesLoaded = true;
+        widget.onThemeReady(AppTheme.buildTheme(primary, secondary));
+      }
+    } catch (_) {}
+  }
+
+  Color? _parseColor(dynamic v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return _colorFromHex(s);
+  }
+
+  Color _colorFromHex(String hex) {
+    String s = hex.startsWith('#') ? hex.substring(1) : hex;
+    if (s.length != 6) return AppColors.primary;
+    final r = int.tryParse(s.substring(0, 2), radix: 16);
+    final g = int.tryParse(s.substring(2, 4), radix: 16);
+    final b = int.tryParse(s.substring(4, 6), radix: 16);
+    if (r == null || g == null || b == null) return AppColors.primary;
+    return Color.fromARGB(255, r, g, b);
   }
 
   Widget _buildPageForIndex(int index) {
@@ -76,6 +113,7 @@ class _MainAppControllerState extends State<MainAppController> {
     }
     final adminPages = [
       const AdminPage(),
+      PreferencesPage(user: _user),
       const AnalysePage(),
       const NotificationsPage(),
     ];
@@ -95,7 +133,7 @@ class _MainAppControllerState extends State<MainAppController> {
   void _logout() {
     SessionService.clearUser();
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(builder: (_) => LoginPage(onThemeReady: widget.onThemeReady)),
       (route) => false,
     );
   }
@@ -105,8 +143,8 @@ class _MainAppControllerState extends State<MainAppController> {
       padding: EdgeInsets.zero,
       children: [
         DrawerHeader(
-          decoration: const BoxDecoration(
-            color: AppColors.primaryDark,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
           ),
           child: SafeArea(
             child: Column(
@@ -138,13 +176,13 @@ class _MainAppControllerState extends State<MainAppController> {
           return ListTile(
             leading: Icon(
               item.icon,
-              color: _selectedIndex == i ? AppColors.primaryDark : AppColors.textSecondary,
+              color: _selectedIndex == i ? Theme.of(context).colorScheme.primaryContainer : AppColors.textSecondary,
             ),
             title: Text(
               item.title,
               style: TextStyle(
                 fontWeight: _selectedIndex == i ? FontWeight.w600 : FontWeight.normal,
-                color: _selectedIndex == i ? AppColors.primaryDark : AppColors.textPrimary,
+                color: _selectedIndex == i ? Theme.of(context).colorScheme.primaryContainer : AppColors.textPrimary,
               ),
             ),
             selected: _selectedIndex == i,
@@ -225,13 +263,13 @@ class _MainAppControllerState extends State<MainAppController> {
                 child: Column(
                   children: [
                     CircleAvatar(
-                      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.2),
+                      backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.2),
                       child: Text(
                         (_user.prenom.isNotEmpty
                                 ? _user.prenom[0]
                                 : _user.email[0])
                             .toUpperCase(),
-                        style: const TextStyle(color: AppColors.primaryDark),
+                        style: TextStyle(color: Theme.of(context).colorScheme.primaryContainer),
                       ),
                     ),
                     const SizedBox(height: 4),

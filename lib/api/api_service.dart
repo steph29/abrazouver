@@ -41,11 +41,16 @@ class ApiService {
 
   static Future<Map<String, dynamic>> put(
     String endpoint,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    Map<String, String>? extraHeaders,
+  }) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...?extraHeaders,
+    };
     final response = await http.put(
       Uri.parse('$_baseUrl$endpoint'),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode(data),
     );
     return _handleResponse(response);

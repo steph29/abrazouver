@@ -6,7 +6,9 @@ import 'login_page.dart';
 import 'main_app_controller.dart';
 
 class SignUpPage extends StatefulWidget {
-  const SignUpPage({super.key});
+  final void Function(ThemeData theme) onThemeReady;
+
+  const SignUpPage({super.key, required this.onThemeReady});
 
   @override
   State<SignUpPage> createState() => _SignUpPageState();
@@ -46,7 +48,7 @@ class _SignUpPageState extends State<SignUpPage> {
       final user = User.fromJson(response);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => MainAppController(user: user),
+          builder: (_) => MainAppController(user: user, onThemeReady: widget.onThemeReady),
         ),
       );
     } catch (e) {
@@ -189,7 +191,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       onPressed: () {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
-                            builder: (_) => const LoginPage(),
+                            builder: (_) => LoginPage(onThemeReady: widget.onThemeReady),
                           ),
                         );
                       },

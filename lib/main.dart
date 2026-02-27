@@ -10,6 +10,7 @@ import 'controller/login_page.dart';
 import 'controller/main_app_controller.dart';
 import 'model/user.dart';
 import 'theme/app_theme.dart';
+import 'theme/theme_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,23 +30,40 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  ThemeData _theme = AppTheme.lightTheme;
+
+  void _updateTheme(ThemeData theme) {
+    setState(() => _theme = theme);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Abrazouver',
-      theme: AppTheme.lightTheme,
-      home: const _InitialPage(),
-      debugShowCheckedModeBanner: false,
+    return AppThemeScope(
+      theme: _theme,
+      updateTheme: _updateTheme,
+      child: MaterialApp(
+        title: 'Abrazouver',
+        theme: _theme,
+        home: _InitialPage(onThemeReady: _updateTheme),
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }
 
 /// Charge la page initiale : MainApp si session sauvegardée, sinon Login.
 class _InitialPage extends StatefulWidget {
-  const _InitialPage();
+  final void Function(ThemeData theme) onThemeReady;
+
+  const _InitialPage({required this.onThemeReady});
 
   @override
   State<_InitialPage> createState() => _InitialPageState();
@@ -66,9 +84,12 @@ class _InitialPageState extends State<_InitialPage> {
         }
         final user = snap.data;
         if (user != null) {
-          return MainAppController(user: user);
+          return MainAppController(
+            user: user,
+            onThemeReady: widget.onThemeReady,
+          );
         }
-        return const LoginPage();
+        return LoginPage(onThemeReady: widget.onThemeReady);
       },
     );
   }
