@@ -7,7 +7,9 @@ const DEFAULTS = {
   secondaryColor: "#2b5a72",
 };
 
-/** Convertit une map { primaryColor, secondaryColor } en objet lisible */
+const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 Mo
+
+/** Convertit une map en objet préférences */
 function prefsToObject(rows) {
   const obj = {};
   for (const r of rows) {
@@ -16,6 +18,7 @@ function prefsToObject(rows) {
   return {
     primaryColor: obj.primaryColor ?? DEFAULTS.primaryColor,
     secondaryColor: obj.secondaryColor ?? DEFAULTS.secondaryColor,
+    logo: obj.logo || null,
   };
 }
 
@@ -66,10 +69,24 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+/** Valide et extrait le base64 du logo (data:image/jpeg;base64,... ou data:image/png;base64,...) */
+function parseLogoDataUri(str) {
+  if (!str || typeof str !== "string") return null;
+  const m = str.match(/^data:image\/(jpeg|jpg|png);base64,(.+)$/i);
+  return m ? m[2] : (str.includes(";base64,") ? str.split(";base64,")[1] : str);
+}
+
+/** Vérifie que le logo base64 fait max 2 Mo décodé */
+function isLogoSizeValid(base64) {
+  if (!base64) return true;
+  const bin = Buffer.from(base64, "base64");
+  return bin.length <= MAX_LOGO_BYTES;
+}
+
 /** PUT /api/preferences - Admin only, met à jour les préférences */
 router.put("/", requireAdmin, async (req, res) => {
   try {
-    const { primaryColor, secondaryColor } = req.body || {};
+    const { primaryColor, secondaryColor, logo } = req.body || {};
     let hasUpdate = false;
     const pool = await getPool();
 
@@ -93,6 +110,27 @@ router.put("/", requireAdmin, async (req, res) => {
         "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('secondaryColor', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
         [hex]
       );
+      hasUpdate = true;
+    }
+    if (logo !== undefined) {
+      if (logo === null || logo === "") {
+        await pool.query("DELETE FROM app_preferences WHERE pref_key = 'logo'");
+      } else {
+        const base64 = parseLogoDataUri(logo);
+        if (!base64) {
+          return res.status(400).json({
+            message: "Logo invalide. Format : JPG ou PNG uniquement. Taille max : 2 Mo.",
+          });
+        }
+        if (!isLogoSizeValid(base64)) {
+          return res.status(400).json({ message: "Logo trop volumineux. Taille max : 2 Mo." });
+        }
+        const toStore = logo.includes(";base64,") ? logo : `data:image/png;base64,${base64}`;
+        await pool.query(
+          "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('logo', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+          [toStore]
+        );
+      }
       hasUpdate = true;
     }
 

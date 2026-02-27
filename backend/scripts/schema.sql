@@ -62,10 +62,10 @@ CREATE TABLE IF NOT EXISTS inscriptions (
   FOREIGN KEY (creneau_id) REFERENCES creneaux(id) ON DELETE CASCADE
 );
 
--- Préférences de l'appli (thème, etc.) - modifiables par les admins
+-- Préférences de l'appli (thème, logo, etc.) - modifiables par les admins
 CREATE TABLE IF NOT EXISTS app_preferences (
   pref_key VARCHAR(100) PRIMARY KEY,
-  pref_value TEXT
+  pref_value MEDIUMTEXT
 );
 INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
   ('primaryColor', '#4CAF50'),

@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../api/preferences_service.dart';
@@ -17,9 +20,12 @@ class PreferencesPage extends StatefulWidget {
 class _PreferencesPageState extends State<PreferencesPage> {
   late TextEditingController _primaryController;
   late TextEditingController _secondaryController;
+  String? _logoDataUri;
   bool _loading = false;
   bool _saving = false;
   String? _error;
+
+  static const int _maxLogoBytes = 2 * 1024 * 1024; // 2 Mo
 
   @override
   void initState() {
@@ -46,6 +52,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
       setState(() {
         _primaryController.text = (prefs['primaryColor'] as String?) ?? '#4CAF50';
         _secondaryController.text = (prefs['secondaryColor'] as String?) ?? '#2b5a72';
+        _logoDataUri = prefs['logo'] as String?;
         _loading = false;
       });
     } catch (e) {
@@ -54,6 +61,42 @@ class _PreferencesPageState extends State<PreferencesPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _pickLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible de lire le fichier. Essayez un autre format.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (bytes.length > _maxLogoBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fichier trop volumineux (${(bytes.length / 1024).round()} Ko). Max : 2 Mo.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final ext = file.extension?.toLowerCase() ?? 'png';
+    final mime = ext == 'jpg' || ext == 'jpeg' ? 'jpeg' : 'png';
+    final base64 = base64Encode(bytes);
+    setState(() => _logoDataUri = 'data:image/$mime;base64,$base64');
+  }
+
+  void _removeLogo() {
+    setState(() => _logoDataUri = null);
   }
 
   bool _isValidHex(String? s) {
@@ -89,6 +132,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         widget.user.id,
         primaryColor: primary.startsWith('#') ? primary : '#$primary',
         secondaryColor: secondary.startsWith('#') ? secondary : '#$secondary',
+        logo: _logoDataUri,
+        removeLogo: _logoDataUri == null,
       );
       if (!mounted) return;
 
@@ -98,6 +143,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
 
       final scope = AppThemeScope.maybeOf(context);
       scope?.updateTheme(newTheme);
+      scope?.updateLogo(prefs['logo'] as String?);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -118,6 +164,62 @@ class _PreferencesPageState extends State<PreferencesPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _buildLogoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Logo de l\'association',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Format : JPG ou PNG uniquement. Taille max : 2 Mo. Affiché en haut à gauche dans l\'application.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (_logoDataUri != null) ...[
+              Container(
+                height: 64,
+                width: 64,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: imageFromDataUri(_logoDataUri, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+            FilledButton.tonalIcon(
+              onPressed: _pickLogo,
+              icon: Icon(_logoDataUri != null ? Icons.refresh_rounded : Icons.upload_file_rounded),
+              label: Text(_logoDataUri != null ? 'Remplacer le logo' : 'Choisir un logo'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+            if (_logoDataUri != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _removeLogo,
+                icon: const Icon(Icons.delete_outline_rounded),
+                tooltip: 'Supprimer le logo',
+                style: IconButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -173,6 +275,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
               controller: _secondaryController,
               hint: '#2b5a72',
             ),
+            const SizedBox(height: 24),
+            _buildLogoSection(),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: _saving ? null : _save,

@@ -7,14 +7,19 @@ class PreferencesService {
   }
 
   /// Met à jour les préférences - admin uniquement (X-User-Id requis)
+  /// logo: data URI pour ajouter/modifier, ou passer removeLogo: true pour supprimer
   static Future<Map<String, dynamic>> update(
     int userId, {
     String? primaryColor,
     String? secondaryColor,
+    String? logo,
+    bool removeLogo = false,
   }) async {
     final body = <String, dynamic>{};
     if (primaryColor != null) body['primaryColor'] = primaryColor;
     if (secondaryColor != null) body['secondaryColor'] = secondaryColor;
+    if (removeLogo) body['logo'] = null;
+    else if (logo != null) body['logo'] = logo;
     return ApiService.put(
       '/preferences',
       body,

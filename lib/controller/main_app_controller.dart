@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/preferences_service.dart';
+import '../theme/theme_provider.dart';
 import '../api/session_service.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
@@ -62,16 +63,21 @@ class _MainAppControllerState extends State<MainAppController> {
   }
 
   static bool _themePreferencesLoaded = false;
+  static bool _logoPreferencesLoaded = false;
 
   Future<void> _loadThemePreferences() async {
-    if (_themePreferencesLoaded) return;
     try {
       final prefs = await PreferencesService.get();
       final primary = _parseColor(prefs['primaryColor']);
       final secondary = _parseColor(prefs['secondaryColor']);
-      if (primary != null && secondary != null) {
+      if (primary != null && secondary != null && !_themePreferencesLoaded) {
         _themePreferencesLoaded = true;
         widget.onThemeReady(AppTheme.buildTheme(primary, secondary));
+      }
+      if (!_logoPreferencesLoaded && mounted) {
+        _logoPreferencesLoaded = true;
+        final logo = prefs['logo'] as String?;
+        AppThemeScope.maybeOf(context)?.updateLogo(logo);
       }
     } catch (_) {}
   }
@@ -204,15 +210,32 @@ class _MainAppControllerState extends State<MainAppController> {
     final isWide = MediaQuery.of(context).size.width >= _kBreakpointTablet;
     final useRail = isWide;
 
+    final scope = AppThemeScope.maybeOf(context);
+    final logoUri = scope?.logoDataUri;
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentTitle),
         leading: useRail
-            ? null
+            ? (logoUri != null && logoUri.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Center(child: imageFromDataUri(logoUri, height: 36, width: 36)),
+                  )
+                : null)
             : Builder(
-                builder: (ctx) => IconButton(
-                  icon: const Icon(Icons.menu_rounded),
-                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                builder: (ctx) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (logoUri != null && logoUri.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: imageFromDataUri(logoUri, height: 36, width: 36),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.menu_rounded),
+                      onPressed: () => Scaffold.of(ctx).openDrawer(),
+                    ),
+                  ],
                 ),
               ),
         actions: [

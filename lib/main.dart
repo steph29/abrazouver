@@ -39,16 +39,23 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   ThemeData _theme = AppTheme.lightTheme;
+  String? _logo;
 
   void _updateTheme(ThemeData theme) {
     setState(() => _theme = theme);
+  }
+
+  void _updateLogo(String? logo) {
+    setState(() => _logo = logo);
   }
 
   @override
   Widget build(BuildContext context) {
     return AppThemeScope(
       theme: _theme,
+      logoDataUri: _logo,
       updateTheme: _updateTheme,
+      updateLogo: _updateLogo,
       child: MaterialApp(
         title: 'Abrazouver',
         theme: _theme,

@@ -61,9 +61,10 @@ async function runMigration(options = {}) {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS app_preferences (
         pref_key VARCHAR(100) PRIMARY KEY,
-        pref_value TEXT
+        pref_value MEDIUMTEXT
       )
     `);
+    await conn.query("ALTER TABLE app_preferences MODIFY pref_value MEDIUMTEXT").catch(() => {});
     await conn.query(`
       INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
         ('primaryColor', '#4CAF50'),
