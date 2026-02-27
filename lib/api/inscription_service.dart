@@ -1,6 +1,14 @@
 import 'api_service.dart';
 
 class InscriptionService {
+  /// Mes inscriptions avec détails poste/créneau
+  static Future<Map<String, dynamic>> getMesInscriptions(int userId) async {
+    return ApiService.get(
+      '/benevoles/inscriptions/me',
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
+
   static Future<Map<String, dynamic>> inscrire(
     int userId,
     int creneauId,

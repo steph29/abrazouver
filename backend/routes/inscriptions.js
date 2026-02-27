@@ -10,11 +10,52 @@ function getUserId(req) {
   return Number.isNaN(n) ? null : n;
 }
 
-/** GET - Évite que le CRUD intercepte ; renvoie une info simple */
+/** GET /me - Mes inscriptions avec détails poste/créneau (header: X-User-Id) */
+router.get("/me", async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Authentification requise (X-User-Id)" });
+    }
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      `SELECT i.id as inscription_id, i.creneau_id, i.user_id,
+              c.date_debut, c.date_fin, c.nb_benevoles_requis,
+              p.id as poste_id, p.titre, p.description
+       FROM inscriptions i
+       JOIN creneaux c ON c.id = i.creneau_id
+       JOIN postes p ON p.id = c.poste_id
+       WHERE i.user_id = ?
+       ORDER BY c.date_debut, p.titre`,
+      [userId]
+    );
+    const data = rows.map((r) => ({
+      inscriptionId: r.inscription_id,
+      creneauId: r.creneau_id,
+      poste: {
+        id: r.poste_id,
+        titre: r.titre,
+        description: r.description,
+      },
+      creneau: {
+        id: r.creneau_id,
+        dateDebut: r.date_debut,
+        dateFin: r.date_fin,
+        nbBenevolesRequis: r.nb_benevoles_requis,
+      },
+    }));
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** GET - Info des endpoints */
 router.get("/", (req, res) => {
   res.json({
     message: "Inscriptions bénévoles",
     endpoints: {
+      "GET /me": "Mes inscriptions (header: X-User-Id)",
       "POST /": "S'inscrire à un créneau (body: { creneauId }, header: X-User-Id)",
       "DELETE /:creneauId": "Se désinscrire (header: X-User-Id)",
     },

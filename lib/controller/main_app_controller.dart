@@ -60,7 +60,7 @@ class _MainAppControllerState extends State<MainAppController> {
     if (index < _mainItems.length) {
       final pages = [
         const AccueilPage(),
-        const MesPostesPage(),
+        MesPostesPage(user: _user),
         PlacesLibresPage(user: _user),
         const ContactPage(),
         const LiensUtilesPage(),

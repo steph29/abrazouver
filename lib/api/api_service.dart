@@ -8,8 +8,17 @@ class ApiService {
     _baseUrl = url;
   }
 
-  static Future<Map<String, dynamic>> get(String endpoint) async {
-    final response = await http.get(Uri.parse('$_baseUrl$endpoint'));
+  static Future<Map<String, dynamic>> get(
+    String endpoint, {
+    Map<String, String>? extraHeaders,
+  }) async {
+    final headers = <String, String>{
+      ...?extraHeaders,
+    };
+    final response = await http.get(
+      Uri.parse('$_baseUrl$endpoint'),
+      headers: headers.isNotEmpty ? headers : null,
+    );
     return _handleResponse(response);
   }
 
