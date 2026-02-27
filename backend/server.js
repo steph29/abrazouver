@@ -1,10 +1,11 @@
-require("dotenv").config();
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const { router: twofaRoutes } = require("./routes/twofa");
 const { postesReadRouter, postesAdminRouter } = require("./routes/postes");
 const { isAdmin } = require("./middleware/isAdmin");
+const inscriptionsRoutes = require("./routes/inscriptions");
 const crudRoutes = require("./routes/crud");
 const { getPool } = require("./config/database");
 
@@ -32,6 +33,7 @@ app.use("/api/postes", postesReadRouter);
 // Admin (gestion postes/créneaux)
 app.use("/api/admin/postes", isAdmin, postesAdminRouter);
 
+app.use("/api/benevoles/inscriptions", inscriptionsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/2fa", twofaRoutes);
 app.use("/api", crudRoutes);
@@ -43,6 +45,7 @@ async function start() {
     console.log(`   - Health: GET /api/health`);
     console.log(`   - Auth:   POST /api/auth/login, POST /api/auth/register`);
     console.log(`   - Postes: GET /api/postes (public), POST/PUT/DELETE /api/admin/postes (admin)`);
+    console.log(`   - Bénévoles: GET/POST/DELETE /api/benevoles/inscriptions`);
     console.log(`   - CRUD:   GET/POST/PUT/DELETE /api/:table`);
   });
 }

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
 
-const RESERVED_TABLES = ['auth', 'admin', 'health', '2fa', 'postes', 'creneaux'];
+const RESERVED_TABLES = ['auth', 'admin', 'benevoles', 'health', '2fa', 'postes', 'creneaux', 'inscriptions'];
 
 function sanitizeTable(table) {
   return table.replace(/[^a-z0-9_]/gi, '');

@@ -61,7 +61,7 @@ class _MainAppControllerState extends State<MainAppController> {
       final pages = [
         const AccueilPage(),
         const MesPostesPage(),
-        const PlacesLibresPage(),
+        PlacesLibresPage(user: _user),
         const ContactPage(),
         const LiensUtilesPage(),
       ];

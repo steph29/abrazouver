@@ -21,6 +21,7 @@ class _AdminPageState extends State<AdminPage> {
   bool _loading = false;
   bool _saving = false;
   String? _error;
+  int? _editingPosteId;
 
   @override
   void initState() {
@@ -55,6 +56,28 @@ class _AdminPageState extends State<AdminPage> {
         _loading = false;
       });
     }
+  }
+
+  void _startEdit(Poste p) {
+    _editingPosteId = p.id;
+    _titreController.text = p.titre;
+    _descController.text = p.description ?? '';
+    setState(() {
+      _creneaux = p.creneaux
+          .map((c) => _CreneauForm(
+                debut: c.dateDebut,
+                fin: c.dateFin,
+                nbBenevoles: c.nbBenevolesRequis,
+              ))
+          .toList();
+    });
+  }
+
+  void _cancelEdit() {
+    _editingPosteId = null;
+    _titreController.clear();
+    _descController.clear();
+    setState(() => _creneaux = []);
   }
 
   Future<void> _submit() async {
@@ -100,32 +123,35 @@ class _AdminPageState extends State<AdminPage> {
     }
     setState(() => _saving = true);
     try {
-      await PosteService.createPoste({
+      final payload = {
         'titre': _titreController.text.trim(),
         'description': _descController.text.trim().isEmpty
             ? null
             : _descController.text.trim(),
         'creneaux': _creneaux
             .map((c) => {
-                  'dateDebut': c.debut!.toIso8601String(),
-                  'dateFin': c.fin!.toIso8601String(),
+                  'dateDebut': _formatDateTimeForApi(c.debut!),
+                  'dateFin': _formatDateTimeForApi(c.fin!),
                   'nbBenevolesRequis': c.nbBenevoles,
                 })
             .toList(),
-      });
+      };
+      if (_editingPosteId != null) {
+        await PosteService.updatePoste(_editingPosteId!, payload);
+      } else {
+        await PosteService.createPoste(payload);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Poste créé avec succès'),
+        SnackBar(
+          content: Text(_editingPosteId != null
+              ? 'Poste mis à jour'
+              : 'Poste créé avec succès'),
           backgroundColor: AppColors.primary,
         ),
       );
-      _titreController.clear();
-      _descController.clear();
-      setState(() {
-        _creneaux = [];
-        _saving = false;
-      });
+      _cancelEdit();
+      setState(() => _saving = false);
       _loadPostes();
     } catch (e) {
       if (!mounted) return;
@@ -197,7 +223,9 @@ class _AdminPageState extends State<AdminPage> {
     if (date == null || !ctx.mounted) return;
     final time = await showTimePicker(
       context: ctx,
-      initialTime: TimeOfDay.fromDateTime(initial ?? DateTime.now()),
+      initialTime: initial != null
+          ? TimeOfDay.fromDateTime(initial)
+          : const TimeOfDay(hour: 12, minute: 0),
     );
     if (time == null || !ctx.mounted) return;
     onSelected(DateTime(date.year, date.month, date.day, time.hour, time.minute));
@@ -223,12 +251,25 @@ class _AdminPageState extends State<AdminPage> {
                 padding: const EdgeInsets.all(20),
                 child: Form(
                   key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Créer un poste',
-                        style: Theme.of(context).textTheme.titleLarge,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _editingPosteId != null
+                                ? 'Modifier le poste'
+                                : 'Créer un poste',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          if (_editingPosteId != null)
+                            TextButton.icon(
+                              onPressed: _saving ? null : _cancelEdit,
+                              icon: const Icon(Icons.close, size: 18),
+                              label: const Text('Annuler'),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -442,7 +483,9 @@ class _AdminPageState extends State<AdminPage> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('Créer le poste'),
+                            : Text(_editingPosteId != null
+                                ? 'Mettre à jour'
+                                : 'Créer le poste'),
                       ),
                     ],
                   ),
@@ -496,9 +539,20 @@ class _AdminPageState extends State<AdminPage> {
                             ? p.description!
                             : '${p.creneaux.length} créneau(x)',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => _deletePoste(p),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => _startEdit(p),
+                            tooltip: 'Modifier',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => _deletePoste(p),
+                            tooltip: 'Supprimer',
+                          ),
+                        ],
                       ),
                     ),
                   )),
@@ -506,6 +560,12 @@ class _AdminPageState extends State<AdminPage> {
         ),
       ),
     );
+  }
+
+  /// Format pour l'API MySQL : YYYY-MM-DD HH:mm:ss (évite tout problème de locale)
+  String _formatDateTimeForApi(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:00';
   }
 
   String _formatDateTime(DateTime dt) {

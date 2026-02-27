@@ -1,8 +1,7 @@
 -- Script d'initialisation de la base de données Abrazouver
 -- À exécuter sur votre base SQL OVH une fois les paramètres configurés
 
-CREATE DATABASE IF NOT EXISTS abrazouver_apel;
-USE abrazouver_apel;
+
 
 -- Table des utilisateurs (authentification)
 CREATE TABLE IF NOT EXISTS users (

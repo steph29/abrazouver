@@ -1,4 +1,10 @@
--- Tables uniquement (pour init-db.js, connexion déjà sur la base)
+-- =============================================================================
+-- Schéma BDD Abrazouver
+-- =============================================================================
+-- Ce fichier est exécuté automatiquement au démarrage du serveur et par deploy.sh
+-- Pour ajouter de nouvelles tables : éditez ce fichier uniquement, puis déployez.
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
@@ -43,3 +49,15 @@ CREATE TABLE IF NOT EXISTS creneaux (
 
 CREATE INDEX idx_creneaux_poste ON creneaux(poste_id);
 CREATE INDEX idx_creneaux_dates ON creneaux(date_debut, date_fin);
+
+-- Inscriptions des bénévoles aux créneaux
+CREATE TABLE IF NOT EXISTS inscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  creneau_id INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_user_creneau (user_id, creneau_id),
+  KEY idx_inscriptions_creneau (creneau_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (creneau_id) REFERENCES creneaux(id) ON DELETE CASCADE
+);

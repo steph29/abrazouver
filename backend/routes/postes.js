@@ -1,6 +1,21 @@
 const express = require("express");
 const { getPool } = require("../config/database");
 
+/** Normalise une date pour MySQL : YYYY-MM-DD HH:mm:ss */
+function toMysqlDateTime(str) {
+  const d = new Date(str);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`Date invalide: ${str}`);
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day} ${h}:${min}:${sec}`;
+}
+
 /**
  * Vérifie si des créneaux se chevauchent.
  * Deux créneaux [a1,b1] et [a2,b2] se chevauchent si a1 < b2 ET b1 > a2.
@@ -29,16 +44,27 @@ postesReadRouter.get("/", async (req, res) => {
       "SELECT id, titre, description, created_at, updated_at FROM postes ORDER BY titre"
     );
     const [creneaux] = await pool.query(
-      "SELECT id, poste_id, date_debut, date_fin, nb_benevoles_requis FROM creneaux ORDER BY poste_id, date_debut"
+      `SELECT c.id, c.poste_id, c.date_debut, c.date_fin, c.nb_benevoles_requis,
+              COALESCE(COUNT(i.id), 0) as nb_inscrits
+       FROM creneaux c
+       LEFT JOIN inscriptions i ON i.creneau_id = c.id
+       GROUP BY c.id
+       ORDER BY c.poste_id, c.date_debut`
     );
     const byPoste = creneaux.reduce((acc, c) => {
       const pid = c.poste_id;
+      const nbRequis = c.nb_benevoles_requis;
+      const nbInscrits = Number(c.nb_inscrits) || 0;
+      const placesRestantes = Math.max(0, nbRequis - nbInscrits);
       if (!acc[pid]) acc[pid] = [];
       acc[pid].push({
         id: c.id,
         dateDebut: c.date_debut,
         dateFin: c.date_fin,
-        nbBenevolesRequis: c.nb_benevoles_requis,
+        nbBenevolesRequis: nbRequis,
+        nbInscrits,
+        placesRestantes,
+        complet: placesRestantes <= 0,
       });
       return acc;
     }, {});
@@ -61,17 +87,33 @@ postesReadRouter.get("/:id", async (req, res) => {
     );
     if (!poste) return res.status(404).json({ message: "Poste non trouvé" });
     const [creneaux] = await pool.query(
-      "SELECT id, date_debut, date_fin, nb_benevoles_requis FROM creneaux WHERE poste_id = ? ORDER BY date_debut",
+      `SELECT c.id, c.date_debut, c.date_fin, c.nb_benevoles_requis,
+              COALESCE(COUNT(i.id), 0) as nb_inscrits
+       FROM creneaux c
+       LEFT JOIN inscriptions i ON i.creneau_id = c.id
+       WHERE c.poste_id = ?
+       GROUP BY c.id
+       ORDER BY c.date_debut`,
       [req.params.id]
     );
+    const nbRequis = (c) => c.nb_benevoles_requis;
+    const nbInscrits = (c) => Number(c.nb_inscrits) || 0;
     res.json({
       ...poste,
-      creneaux: creneaux.map((c) => ({
-        id: c.id,
-        dateDebut: c.date_debut,
-        dateFin: c.date_fin,
-        nbBenevolesRequis: c.nb_benevoles_requis,
-      })),
+      creneaux: creneaux.map((c) => {
+        const req = nbRequis(c);
+        const ins = nbInscrits(c);
+        const rest = Math.max(0, req - ins);
+        return {
+          id: c.id,
+          dateDebut: c.date_debut,
+          dateFin: c.date_fin,
+          nbBenevolesRequis: req,
+          nbInscrits: ins,
+          placesRestantes: rest,
+          complet: rest <= 0,
+        };
+      }),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -123,8 +165,8 @@ async function createPosteHandler(req, res) {
         "INSERT INTO creneaux (poste_id, date_debut, date_fin, nb_benevoles_requis) VALUES (?, ?, ?, ?)",
         [
           posteId,
-          c.dateDebut,
-          c.dateFin,
+          toMysqlDateTime(c.dateDebut),
+          toMysqlDateTime(c.dateFin),
           c.nbBenevolesRequis > 0 ? c.nbBenevolesRequis : 1,
         ]
       );
@@ -200,8 +242,8 @@ postesAdminRouter.put("/:id", async (req, res) => {
         "INSERT INTO creneaux (poste_id, date_debut, date_fin, nb_benevoles_requis) VALUES (?, ?, ?, ?)",
         [
           posteId,
-          c.dateDebut,
-          c.dateFin,
+          toMysqlDateTime(c.dateDebut),
+          toMysqlDateTime(c.dateFin),
           c.nbBenevolesRequis > 0 ? c.nbBenevolesRequis : 1,
         ]
       );

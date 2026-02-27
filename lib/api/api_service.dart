@@ -15,11 +15,16 @@ class ApiService {
 
   static Future<Map<String, dynamic>> post(
     String endpoint,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    Map<String, String>? extraHeaders,
+  }) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...?extraHeaders,
+    };
     final response = await http.post(
       Uri.parse('$_baseUrl$endpoint'),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode(data),
     );
     return _handleResponse(response);
@@ -37,8 +42,17 @@ class ApiService {
     return _handleResponse(response);
   }
 
-  static Future<Map<String, dynamic>> delete(String endpoint) async {
-    final response = await http.delete(Uri.parse('$_baseUrl$endpoint'));
+  static Future<Map<String, dynamic>> delete(
+    String endpoint, {
+    Map<String, String>? extraHeaders,
+  }) async {
+    final headers = <String, String>{
+      ...?extraHeaders,
+    };
+    final response = await http.delete(
+      Uri.parse('$_baseUrl$endpoint'),
+      headers: headers.isNotEmpty ? headers : null,
+    );
     return _handleResponse(response);
   }
 
