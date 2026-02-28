@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../api/contact_admin_service.dart';
 import '../api/preferences_service.dart';
-import '../theme/theme_provider.dart';
 import '../api/session_service.dart';
+import '../theme/theme_provider.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
 import 'accueil_page.dart';
@@ -33,6 +34,7 @@ class _MainAppControllerState extends State<MainAppController> {
   late User _user;
   String _currentTitle = 'Accueil';
   int _selectedIndex = 0;
+  int _unreadNotificationsCount = 0;
 
   final List<({String title, IconData icon})> _mainItems = [
     (title: 'Accueil', icon: Icons.home_rounded),
@@ -60,6 +62,7 @@ class _MainAppControllerState extends State<MainAppController> {
     super.initState();
     _user = widget.user;
     _loadThemePreferences();
+    if (_user.isAdmin) _loadNotificationsBadge();
   }
 
   static bool _themePreferencesLoaded = false;
@@ -89,6 +92,22 @@ class _MainAppControllerState extends State<MainAppController> {
     return _colorFromHex(s);
   }
 
+  Future<void> _loadNotificationsBadge() async {
+    try {
+      final count = await ContactAdminService.getCount(_user.id);
+      final lastSeen = await SessionService.getNotificationsLastSeenCount();
+      final unread = count > lastSeen ? count - lastSeen : 0;
+      if (mounted) setState(() => _unreadNotificationsCount = unread);
+    } catch (_) {
+      if (mounted) setState(() => _unreadNotificationsCount = 0);
+    }
+  }
+
+  void _onNotificationsViewed(int count) async {
+    await SessionService.setNotificationsLastSeenCount(count);
+    if (mounted) setState(() => _unreadNotificationsCount = 0);
+  }
+
   Color _colorFromHex(String hex) {
     String s = hex.startsWith('#') ? hex.substring(1) : hex;
     if (s.length != 6) return AppColors.primary;
@@ -105,7 +124,7 @@ class _MainAppControllerState extends State<MainAppController> {
         const AccueilPage(),
         MesPostesPage(user: _user),
         PlacesLibresPage(user: _user),
-        const ContactPage(),
+        ContactPage(user: _user),
         const LiensUtilesPage(),
       ];
       return pages[index];
@@ -121,7 +140,7 @@ class _MainAppControllerState extends State<MainAppController> {
       const AdminPage(),
       PreferencesPage(user: _user),
       const AnalysePage(),
-      const NotificationsPage(),
+      NotificationsPage(user: _user, onViewed: _onNotificationsViewed),
     ];
     return adminPages[index - compteIndex - 1];
   }
@@ -134,6 +153,7 @@ class _MainAppControllerState extends State<MainAppController> {
     if (closeDrawer) {
       Navigator.pop(context);
     }
+    if (_user.isAdmin) _loadNotificationsBadge();
   }
 
   void _logout() {
@@ -179,11 +199,22 @@ class _MainAppControllerState extends State<MainAppController> {
         ),
         ...List.generate(_allItems.length, (i) {
           final item = _allItems[i];
+          final           showBadge = item.title == 'Notifications' && _unreadNotificationsCount > 0;
           return ListTile(
-            leading: Icon(
-              item.icon,
-              color: _selectedIndex == i ? Theme.of(context).colorScheme.primaryContainer : AppColors.textSecondary,
-            ),
+            leading: showBadge
+                ? Badge(
+                    backgroundColor: Colors.red,
+                    textColor: Colors.white,
+                    label: Text('$_unreadNotificationsCount', style: const TextStyle(fontSize: 10)),
+                    child: Icon(
+                      item.icon,
+                      color: _selectedIndex == i ? Theme.of(context).colorScheme.primaryContainer : AppColors.textSecondary,
+                    ),
+                  )
+                : Icon(
+                    item.icon,
+                    color: _selectedIndex == i ? Theme.of(context).colorScheme.primaryContainer : AppColors.textSecondary,
+                  ),
             title: Text(
               item.title,
               style: TextStyle(
@@ -324,7 +355,14 @@ class _MainAppControllerState extends State<MainAppController> {
                 ),
                 if (_user.isAdmin)
                   ..._adminItems.map((e) => NavigationRailDestination(
-                        icon: Icon(e.icon),
+                        icon: e.title == 'Notifications' && _unreadNotificationsCount > 0
+                            ? Badge(
+                                backgroundColor: Colors.red,
+                                textColor: Colors.white,
+                                label: Text('$_unreadNotificationsCount', style: const TextStyle(fontSize: 10)),
+                                child: Icon(e.icon),
+                              )
+                            : Icon(e.icon),
                         label: Text(e.title),
                       )),
               ],

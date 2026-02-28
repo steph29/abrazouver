@@ -14,12 +14,14 @@ class PreferencesService {
     String? secondaryColor,
     String? logo,
     bool removeLogo = false,
+    String? contactEmail,
   }) async {
     final body = <String, dynamic>{};
     if (primaryColor != null) body['primaryColor'] = primaryColor;
     if (secondaryColor != null) body['secondaryColor'] = secondaryColor;
     if (removeLogo) body['logo'] = null;
     else if (logo != null) body['logo'] = logo;
+    if (contactEmail != null) body['contactEmail'] = contactEmail;
     return ApiService.put(
       '/preferences',
       body,

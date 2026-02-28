@@ -8,6 +8,8 @@ class ApiService {
     _baseUrl = url;
   }
 
+  static String get baseUrl => _baseUrl;
+
   static Future<Map<String, dynamic>> get(
     String endpoint, {
     Map<String, String>? extraHeaders,

@@ -5,6 +5,7 @@ const { getPool } = require("../config/database");
 const DEFAULTS = {
   primaryColor: "#4CAF50",
   secondaryColor: "#2b5a72",
+  contactEmail: "",
 };
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 Mo
@@ -19,6 +20,7 @@ function prefsToObject(rows) {
     primaryColor: obj.primaryColor ?? DEFAULTS.primaryColor,
     secondaryColor: obj.secondaryColor ?? DEFAULTS.secondaryColor,
     logo: obj.logo || null,
+    contactEmail: obj.contactEmail ?? "",
   };
 }
 
@@ -69,24 +71,36 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-/** Valide et extrait le base64 du logo (data:image/jpeg;base64,... ou data:image/png;base64,...) */
+/** Valide et extrait le base64 du logo (data:image/xxx;base64,... ou base64 seul) */
 function parseLogoDataUri(str) {
   if (!str || typeof str !== "string") return null;
-  const m = str.match(/^data:image\/(jpeg|jpg|png);base64,(.+)$/i);
-  return m ? m[2] : (str.includes(";base64,") ? str.split(";base64,")[1] : str);
+  const s = str.trim();
+  if (s.length < 20) return null;
+  if (s.includes(";base64,")) {
+    const parts = s.split(";base64,", 2);
+    if (!/data:image\/(jpeg|jpg|png)/i.test(parts[0] || "")) return null;
+    const part = parts[1];
+    return part ? part.replace(/\s/g, "") : null;
+  }
+  if (/^[A-Za-z0-9+/=]+$/.test(s)) return s;
+  return null;
 }
 
 /** Vérifie que le logo base64 fait max 2 Mo décodé */
-function isLogoSizeValid(base64) {
-  if (!base64) return true;
-  const bin = Buffer.from(base64, "base64");
-  return bin.length <= MAX_LOGO_BYTES;
+function isLogoValid(base64) {
+  if (!base64) return false;
+  try {
+    const bin = Buffer.from(base64, "base64");
+    return bin.length > 0 && bin.length <= MAX_LOGO_BYTES;
+  } catch {
+    return false;
+  }
 }
 
 /** PUT /api/preferences - Admin only, met à jour les préférences */
 router.put("/", requireAdmin, async (req, res) => {
   try {
-    const { primaryColor, secondaryColor, logo } = req.body || {};
+    const { primaryColor, secondaryColor, logo, contactEmail } = req.body || {};
     let hasUpdate = false;
     const pool = await getPool();
 
@@ -117,13 +131,10 @@ router.put("/", requireAdmin, async (req, res) => {
         await pool.query("DELETE FROM app_preferences WHERE pref_key = 'logo'");
       } else {
         const base64 = parseLogoDataUri(logo);
-        if (!base64) {
+        if (!base64 || !isLogoValid(base64)) {
           return res.status(400).json({
             message: "Logo invalide. Format : JPG ou PNG uniquement. Taille max : 2 Mo.",
           });
-        }
-        if (!isLogoSizeValid(base64)) {
-          return res.status(400).json({ message: "Logo trop volumineux. Taille max : 2 Mo." });
         }
         const toStore = logo.includes(";base64,") ? logo : `data:image/png;base64,${base64}`;
         await pool.query(
@@ -131,6 +142,14 @@ router.put("/", requireAdmin, async (req, res) => {
           [toStore]
         );
       }
+      hasUpdate = true;
+    }
+    if (contactEmail !== undefined) {
+      const val = typeof contactEmail === "string" ? contactEmail.trim() : "";
+      await pool.query(
+        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('contactEmail', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+        [val]
+      );
       hasUpdate = true;
     }
 

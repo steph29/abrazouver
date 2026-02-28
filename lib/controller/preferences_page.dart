@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../api/preferences_service.dart';
+import '../utils/logo_picker.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
@@ -20,6 +20,7 @@ class PreferencesPage extends StatefulWidget {
 class _PreferencesPageState extends State<PreferencesPage> {
   late TextEditingController _primaryController;
   late TextEditingController _secondaryController;
+  late TextEditingController _contactEmailController;
   String? _logoDataUri;
   bool _loading = false;
   bool _saving = false;
@@ -32,6 +33,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
     super.initState();
     _primaryController = TextEditingController(text: '#4CAF50');
     _secondaryController = TextEditingController(text: '#2b5a72');
+    _contactEmailController = TextEditingController();
     _loadPreferences();
   }
 
@@ -39,6 +41,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   void dispose() {
     _primaryController.dispose();
     _secondaryController.dispose();
+    _contactEmailController.dispose();
     super.dispose();
   }
 
@@ -52,6 +55,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
       setState(() {
         _primaryController.text = (prefs['primaryColor'] as String?) ?? '#4CAF50';
         _secondaryController.text = (prefs['secondaryColor'] as String?) ?? '#2b5a72';
+        _contactEmailController.text = (prefs['contactEmail'] as String?) ?? '';
         _logoDataUri = prefs['logo'] as String?;
         _loading = false;
       });
@@ -64,13 +68,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   }
 
   Future<void> _pickLogo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png'],
-    );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.single;
-    final bytes = file.bytes;
+    final bytes = await pickImageBytes(maxBytes: _maxLogoBytes);
     if (bytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -89,8 +87,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
       );
       return;
     }
-    final ext = file.extension?.toLowerCase() ?? 'png';
-    final mime = ext == 'jpg' || ext == 'jpeg' ? 'jpeg' : 'png';
+    final mime = bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 ? 'jpeg' : 'png';
     final base64 = base64Encode(bytes);
     setState(() => _logoDataUri = 'data:image/$mime;base64,$base64');
   }
@@ -134,6 +131,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
         secondaryColor: secondary.startsWith('#') ? secondary : '#$secondary',
         logo: _logoDataUri,
         removeLogo: _logoDataUri == null,
+        contactEmail: _contactEmailController.text.trim(),
       );
       if (!mounted) return;
 
@@ -277,6 +275,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
             ),
             const SizedBox(height: 24),
             _buildLogoSection(),
+            const SizedBox(height: 24),
+            _buildContactEmailSection(),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: _saving ? null : _save,
@@ -295,6 +295,33 @@ class _PreferencesPageState extends State<PreferencesPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildContactEmailSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Email de contact (destinataire des messages)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Les messages envoyés depuis la page Contact seront adressés à cette adresse.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _contactEmailController,
+          decoration: const InputDecoration(
+            hintText: 'admin@exemple.org',
+            prefixIcon: Icon(Icons.email_outlined),
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.emailAddress,
+        ),
+      ],
     );
   }
 

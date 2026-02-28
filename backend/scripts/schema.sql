@@ -69,4 +69,19 @@ CREATE TABLE IF NOT EXISTS app_preferences (
 );
 INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
   ('primaryColor', '#4CAF50'),
-  ('secondaryColor', '#2b5a72');
+  ('secondaryColor', '#2b5a72'),
+  ('contactEmail', '');
+
+-- Messages envoyés depuis la page Contact (utilisateur -> admin)
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  subject VARCHAR(500) NOT NULL,
+  body TEXT NOT NULL,
+  attachment_name VARCHAR(255) DEFAULT NULL,
+  attachment_data MEDIUMBLOB DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_contact_user (user_id),
+  KEY idx_contact_created (created_at)
+);
