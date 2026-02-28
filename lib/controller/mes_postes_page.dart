@@ -177,10 +177,36 @@ class _MesPostesPageState extends State<MesPostesPage> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: postesMap.entries.expand((posteEntry) {
+                      children: postesMap.entries.map((posteEntry) {
                         final poste = posteEntry.key;
                         final inscriptions = posteEntry.value;
-                        return inscriptions.map((ins) => _buildCreneauCard(poste, ins));
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ExpansionTile(
+                            leading: Icon(
+                              Icons.work_rounded,
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                            ),
+                            title: Text(
+                              poste.titre,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            subtitle: inscriptions.isNotEmpty
+                                ? Text(
+                                    '${inscriptions.length} inscription${inscriptions.length > 1 ? 's' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  )
+                                : null,
+                            children: inscriptions.map((ins) => _buildCreneauCard(poste, ins)).toList(),
+                          ),
+                        );
                       }).toList(),
                     ),
                   );
@@ -193,73 +219,42 @@ class _MesPostesPageState extends State<MesPostesPage> {
     );
   }
 
+  /// Carte d'un créneau inscrit (affichée dans le déroulant du poste)
   Widget _buildCreneauCard(PosteResume poste, InscriptionDetail ins) {
     final c = ins.creneau;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        poste.titre,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (poste.description?.isNotEmpty == true) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          poste.description!,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.schedule, size: 16, color: AppColors.textSecondary),
-                          const SizedBox(width: 6),
-                          Text(
-                            _formatHoraire(c.dateDebut, c.dateFin),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(Icons.schedule, size: 18, color: AppColors.textSecondary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _formatHoraire(c.dateDebut, c.dateFin),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-                FilledButton.tonalIcon(
-                  onPressed: () => _annuler(ins),
-                  icon: const Icon(Icons.cancel_outlined, size: 18),
-                  label: const Text('Annuler'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red.shade50,
-                    foregroundColor: Colors.red.shade700,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => _annuler(ins),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text('Annuler'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red.shade50,
+                  foregroundColor: Colors.red.shade700,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

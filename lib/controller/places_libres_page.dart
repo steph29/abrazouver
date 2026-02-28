@@ -175,10 +175,36 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: postesMap.entries.expand((posteEntry) {
+                      children: postesMap.entries.map((posteEntry) {
                         final poste = posteEntry.key;
                         final creneaux = posteEntry.value;
-                        return creneaux.map((c) => _buildCreneauCard(poste, c));
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ExpansionTile(
+                            leading: Icon(
+                              Icons.work_rounded,
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                            ),
+                            title: Text(
+                              poste.titre,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            subtitle: creneaux.isNotEmpty
+                                ? Text(
+                                    '${creneaux.length} créneau${creneaux.length > 1 ? 'x' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  )
+                                : null,
+                            children: creneaux.map((c) => _buildCreneauCard(poste, c)).toList(),
+                          ),
+                        );
                       }).toList(),
                     ),
                   );
@@ -198,113 +224,69 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
     return '${jours[d.weekday - 1]} ${d.day} ${mois[d.month - 1]}';
   }
 
+  /// Carte d'un créneau (affichée dans le déroulant du poste)
   Widget _buildCreneauCard(Poste poste, Creneau creneau) {
     final canClick = !creneau.complet && creneau.id != null;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: canClick ? () => _inscrire(creneau, poste) : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          poste.titre,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        if (poste.description?.isNotEmpty == true) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            poste.description!,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(Icons.schedule, size: 16, color: AppColors.textSecondary),
-                            const SizedBox(width: 6),
-                            Text(
-                              _formatHoraire(creneau.dateDebut, creneau.dateFin),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (creneau.complet)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'COMPLET',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryDark.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${creneau.placesRestantes}/${creneau.nbBenevolesRequis}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (canClick) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: () => _inscrire(creneau, poste),
-                    icon: const Icon(Icons.add_circle_outline, size: 18),
-                    label: const Text('M\'inscrire'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: canClick ? () => _inscrire(creneau, poste) : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.schedule, size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _formatHoraire(creneau.dateDebut, creneau.dateFin),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                 ),
+                if (creneau.complet)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Complet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  )
+                else ...[
+                  Text(
+                    '${creneau.placesRestantes}/${creneau.nbBenevolesRequis}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => _inscrire(creneau, poste),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                    ),
+                    child: const Text('M\'inscrire'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
