@@ -15,6 +15,8 @@ class PreferencesService {
     String? logo,
     bool removeLogo = false,
     String? contactEmail,
+    String? accueilTitre,
+    String? accueilDescription,
   }) async {
     final body = <String, dynamic>{};
     if (primaryColor != null) body['primaryColor'] = primaryColor;
@@ -22,6 +24,8 @@ class PreferencesService {
     if (removeLogo) body['logo'] = null;
     else if (logo != null) body['logo'] = logo;
     if (contactEmail != null) body['contactEmail'] = contactEmail;
+    if (accueilTitre != null) body['accueilTitre'] = accueilTitre;
+    if (accueilDescription != null) body['accueilDescription'] = accueilDescription;
     return ApiService.put(
       '/preferences',
       body,

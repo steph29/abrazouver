@@ -70,7 +70,9 @@ CREATE TABLE IF NOT EXISTS app_preferences (
 INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
   ('primaryColor', '#4CAF50'),
   ('secondaryColor', '#2b5a72'),
-  ('contactEmail', '');
+  ('contactEmail', ''),
+  ('accueilTitre', ''),
+  ('accueilDescription', '');
 
 -- Messages envoyés depuis la page Contact (utilisateur -> admin)
 CREATE TABLE IF NOT EXISTS contact_messages (

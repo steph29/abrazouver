@@ -21,6 +21,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
   late TextEditingController _primaryController;
   late TextEditingController _secondaryController;
   late TextEditingController _contactEmailController;
+  late TextEditingController _accueilTitreController;
+  late TextEditingController _accueilDescriptionController;
   String? _logoDataUri;
   bool _loading = false;
   bool _saving = false;
@@ -34,6 +36,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _primaryController = TextEditingController(text: '#4CAF50');
     _secondaryController = TextEditingController(text: '#2b5a72');
     _contactEmailController = TextEditingController();
+    _accueilTitreController = TextEditingController();
+    _accueilDescriptionController = TextEditingController();
     _loadPreferences();
   }
 
@@ -56,6 +60,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         _primaryController.text = (prefs['primaryColor'] as String?) ?? '#4CAF50';
         _secondaryController.text = (prefs['secondaryColor'] as String?) ?? '#2b5a72';
         _contactEmailController.text = (prefs['contactEmail'] as String?) ?? '';
+        _accueilTitreController.text = (prefs['accueilTitre'] as String?) ?? '';
+        _accueilDescriptionController.text = (prefs['accueilDescription'] as String?) ?? '';
         _logoDataUri = prefs['logo'] as String?;
         _loading = false;
       });
@@ -132,6 +138,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         logo: _logoDataUri,
         removeLogo: _logoDataUri == null,
         contactEmail: _contactEmailController.text.trim(),
+        accueilTitre: _accueilTitreController.text.trim(),
+        accueilDescription: _accueilDescriptionController.text,
       );
       if (!mounted) return;
 
@@ -277,6 +285,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
             _buildLogoSection(),
             const SizedBox(height: 24),
             _buildContactEmailSection(),
+            const SizedBox(height: 24),
+            _buildAccueilSection(),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: _saving ? null : _save,
@@ -295,6 +305,202 @@ class _PreferencesPageState extends State<PreferencesPage> {
           ],
         ),
       ),
+    );
+  }
+
+  void _wrapSelection(String openTag, String closeTag) {
+    final c = _accueilDescriptionController;
+    final sel = c.selection;
+    if (!sel.isValid || sel.isCollapsed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez du texte à formater')),
+      );
+      return;
+    }
+    final start = sel.start;
+    final end = sel.end;
+    final selected = c.text.substring(start, end);
+    final wrapped = '$openTag$selected$closeTag';
+    c.text = c.text.substring(0, start) + wrapped + c.text.substring(end);
+    c.selection = TextSelection(baseOffset: start, extentOffset: start + wrapped.length);
+    setState(() {});
+  }
+
+  /// Retire les balises <span style="color:..."> existantes pour éviter l'imbrication
+  String _stripColorSpans(String text) {
+    String s = text;
+    while (true) {
+      final m = RegExp(r'^<span\s+style="color:\s*[^"]*">([\s\S]*?)</span>$')
+          .firstMatch(s);
+      if (m == null) break;
+      s = m.group(1)!;
+    }
+    return s;
+  }
+
+  void _wrapSelectionWithColor(Color color) {
+    final c = _accueilDescriptionController;
+    final sel = c.selection;
+    if (!sel.isValid || sel.isCollapsed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez du texte à formater')),
+      );
+      return;
+    }
+    final start = sel.start;
+    final end = sel.end;
+    final selected = c.text.substring(start, end);
+    final stripped = _stripColorSpans(selected);
+    final hex = '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+    final wrapped = '<span style="color:$hex">$stripped</span>';
+    c.text = c.text.substring(0, start) + wrapped + c.text.substring(end);
+    c.selection = TextSelection(baseOffset: start, extentOffset: start + wrapped.length);
+    setState(() {});
+  }
+
+  static const _presetColors = [
+    (Colors.black, 'Noir'),
+    (Color(0xFFE53935), 'Rouge'),
+    (Color(0xFF1E88E5), 'Bleu'),
+    (Color(0xFF43A047), 'Vert'),
+    (Color(0xFFFB8C00), 'Orange'),
+  ];
+
+  Widget _buildAccueilSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Modifier la page Accueil',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Titre et description affichés sur la page d\'accueil. Utilisez les boutons pour formater la description (gras, italique, couleurs, alignement).',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _accueilTitreController,
+          decoration: const InputDecoration(
+            labelText: 'Titre',
+            hintText: 'Bienvenue',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Description (texte formaté)',
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<b>', '</b>'),
+                    icon: const Icon(Icons.format_bold_rounded),
+                    tooltip: 'Gras',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<i>', '</i>'),
+                    icon: const Icon(Icons.format_italic_rounded),
+                    tooltip: 'Italique',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<u>', '</u>'),
+                    icon: const Icon(Icons.format_underlined_rounded),
+                    tooltip: 'Souligné',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<div style="text-align: left">', '</div>'),
+                    icon: const Icon(Icons.format_align_left_rounded),
+                    tooltip: 'Aligner à gauche',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<div style="text-align: center">', '</div>'),
+                    icon: const Icon(Icons.format_align_center_rounded),
+                    tooltip: 'Centrer',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => _wrapSelection('<div style="text-align: right">', '</div>'),
+                    icon: const Icon(Icons.format_align_right_rounded),
+                    tooltip: 'Aligner à droite',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  ),
+                  ..._presetColors.map((e) => Tooltip(
+                    message: e.$2,
+                    child: InkWell(
+                      onTap: () => _wrapSelectionWithColor(e.$1),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: e.$1,
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  )),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: Colors.grey.shade300),
+              TextFormField(
+                controller: _accueilDescriptionController,
+                decoration: const InputDecoration(
+                  hintText: 'Saisissez la description, sélectionnez du texte puis utilisez les boutons ci-dessus pour le formater.',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                maxLines: 6,
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

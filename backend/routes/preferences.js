@@ -6,6 +6,8 @@ const DEFAULTS = {
   primaryColor: "#4CAF50",
   secondaryColor: "#2b5a72",
   contactEmail: "",
+  accueilTitre: "",
+  accueilDescription: "",
 };
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 Mo
@@ -21,6 +23,8 @@ function prefsToObject(rows) {
     secondaryColor: obj.secondaryColor ?? DEFAULTS.secondaryColor,
     logo: obj.logo || null,
     contactEmail: obj.contactEmail ?? "",
+    accueilTitre: obj.accueilTitre ?? "",
+    accueilDescription: obj.accueilDescription ?? "",
   };
 }
 
@@ -100,7 +104,7 @@ function isLogoValid(base64) {
 /** PUT /api/preferences - Admin only, met à jour les préférences */
 router.put("/", requireAdmin, async (req, res) => {
   try {
-    const { primaryColor, secondaryColor, logo, contactEmail } = req.body || {};
+    const { primaryColor, secondaryColor, logo, contactEmail, accueilTitre, accueilDescription } = req.body || {};
     let hasUpdate = false;
     const pool = await getPool();
 
@@ -148,6 +152,22 @@ router.put("/", requireAdmin, async (req, res) => {
       const val = typeof contactEmail === "string" ? contactEmail.trim() : "";
       await pool.query(
         "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('contactEmail', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+        [val]
+      );
+      hasUpdate = true;
+    }
+    if (accueilTitre !== undefined) {
+      const val = typeof accueilTitre === "string" ? accueilTitre.trim() : "";
+      await pool.query(
+        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('accueilTitre', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+        [val]
+      );
+      hasUpdate = true;
+    }
+    if (accueilDescription !== undefined) {
+      const val = typeof accueilDescription === "string" ? String(accueilDescription) : "";
+      await pool.query(
+        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('accueilDescription', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
         [val]
       );
       hasUpdate = true;

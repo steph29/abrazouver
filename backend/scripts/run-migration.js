@@ -69,7 +69,9 @@ async function runMigration(options = {}) {
       INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
         ('primaryColor', '#4CAF50'),
         ('secondaryColor', '#2b5a72'),
-        ('contactEmail', '')
+        ('contactEmail', ''),
+        ('accueilTitre', ''),
+        ('accueilDescription', '')
     `);
 
     // Créer contact_messages ici (résilient si schema.sql non mis à jour via FTP)
