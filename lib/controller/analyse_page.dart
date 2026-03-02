@@ -1,9 +1,15 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../api/analyse_service.dart';
+import '../theme/theme_provider.dart';
 import '../utils/download_helper.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
@@ -29,11 +35,34 @@ class _AnalysePageState extends State<AnalysePage> {
   int _heureFin = 24;
   bool _exporting = false;
   String _benevoleSearch = '';
+  List<Map<String, dynamic>> _benevolesManuels = [];
+  final TextEditingController _manuelNomController = TextEditingController();
+  final TextEditingController _manuelPrenomController = TextEditingController();
+
+  int get _anneeExport =>
+      _selectedDay?.year ?? DateTime.now().year;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadBenevolesManuels();
+  }
+
+  @override
+  void dispose() {
+    _manuelNomController.dispose();
+    _manuelPrenomController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBenevolesManuels() async {
+    try {
+      final list = await AnalyseService.getBenevolesManuels(widget.user.id, _anneeExport);
+      if (mounted) setState(() => _benevolesManuels = list);
+    } catch (_) {
+      if (mounted) setState(() => _benevolesManuels = []);
+    }
   }
 
   Future<void> _loadData() async {
@@ -79,20 +108,108 @@ class _AnalysePageState extends State<AnalysePage> {
     }
   }
 
-  Future<void> _downloadExport() async {
+  void _showExportChoice() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Télécharger la liste en',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                title: const Text('PDF'),
+                subtitle: const Text('Document lisible'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _downloadExportPdf();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.table_chart, color: Colors.green),
+                title: const Text('XLSX'),
+                subtitle: const Text('Tableur Excel'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _downloadExportXlsx();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadExportPdf() async {
     setState(() => _exporting = true);
     try {
-      final bytes = await AnalyseService.downloadExport(widget.user.id);
-      if (!mounted) return;
-      if (bytes == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors du téléchargement'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-      const filename = 'benevoles_inscrits.xlsx';
+      final logoBytes = _getLogoBytes();
+      final pdf = pw.Document();
+      final appBenevoles = _filteredBenevoles.map((b) => {'nom': b['nom']?.toString() ?? '', 'prenom': b['prenom']?.toString() ?? ''}).toList();
+      final manuels = _benevolesManuels.map((b) => {'nom': b['nom']?.toString() ?? '', 'prenom': b['prenom']?.toString() ?? ''}).toList();
+      final benevoles = [...appBenevoles, ...manuels]
+        ..sort((a, b) => '${a['nom']} ${a['prenom']}'.compareTo('${b['nom']} ${b['prenom']}'));
+
+      pdf.addPage(
+        pw.MultiPage(
+          header: (ctx) => pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              if (logoBytes != null)
+                pw.SizedBox(
+                  width: 80,
+                  height: 40,
+                  child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
+                )
+              else
+                pw.SizedBox.shrink(),
+              pw.Expanded(
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 12),
+                  child: pw.Text(
+                    'Liste des bénévoles inscrits',
+                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                    textAlign: pw.TextAlign.end,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          build: (ctx) => [
+            pw.Table(
+              border: pw.TableBorder.all(),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                  children: [
+                    _cell('Nom', bold: true),
+                    _cell('Prénom', bold: true),
+                  ],
+                ),
+                ...benevoles.map((b) => pw.TableRow(
+                      children: [
+                        _cell(b['nom'] ?? ''),
+                        _cell(b['prenom'] ?? ''),
+                      ],
+                    )),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      final bytes = await pdf.save();
+      const filename = 'benevoles_inscrits.pdf';
       if (kIsWeb) {
-        // Web : téléchargement direct via navigateur
         final ok = await downloadFile(bytes, filename);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +220,77 @@ class _AnalysePageState extends State<AnalysePage> {
           );
         }
       } else {
-        // Mobile : partage via share_plus
+        final file = XFile.fromData(
+          Uint8List.fromList(bytes),
+          name: filename,
+          mimeType: 'application/pdf',
+        );
+        await Share.shareXFiles([file], subject: 'Bénévoles inscrits', text: 'Liste des bénévoles inscrits');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Fichier prêt à partager'),
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  /// Extrait les bytes du logo depuis le data URI (AppThemeScope)
+  Uint8List? _getLogoBytes() {
+    final scope = AppThemeScope.maybeOf(context);
+    final uri = scope?.logoDataUri;
+    if (uri == null || uri.isEmpty) return null;
+    final match = RegExp(r'data:image/\w+;base64,(.+)').firstMatch(uri);
+    if (match == null) return null;
+    try {
+      return base64Decode(match.group(1)!.replaceAll(RegExp(r'\s'), ''));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  pw.Widget _cell(String text, {bool bold = false}) => pw.Padding(
+        padding: const pw.EdgeInsets.all(6),
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
+        ),
+      );
+
+  Future<void> _downloadExportXlsx() async {
+    setState(() => _exporting = true);
+    try {
+      final bytes = await AnalyseService.downloadExport(widget.user.id, annee: _anneeExport);
+      if (!mounted) return;
+      if (bytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors du téléchargement'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      const filename = 'benevoles_inscrits.xlsx';
+      if (kIsWeb) {
+        final ok = await downloadFile(bytes, filename);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ok ? 'Téléchargement démarré' : 'Erreur lors du téléchargement'),
+              backgroundColor: ok ? Theme.of(context).colorScheme.primaryContainer : Colors.red,
+            ),
+          );
+        }
+      } else {
         final file = XFile.fromData(
           bytes,
           name: filename,
@@ -149,6 +336,7 @@ class _AnalysePageState extends State<AnalysePage> {
       _heureFin = 24;
     });
     _loadData();
+    _loadBenevolesManuels();
   }
 
   void _clearDayFilter() {
@@ -158,6 +346,7 @@ class _AnalysePageState extends State<AnalysePage> {
       _heureFin = 24;
     });
     _loadData();
+    _loadBenevolesManuels();
   }
 
   String _formatDateShort(DateTime d) {
@@ -356,7 +545,7 @@ class _AnalysePageState extends State<AnalysePage> {
                 children: [
                   Text('Bénévoles inscrits', style: theme.textTheme.titleMedium),
                   FilledButton.icon(
-                    onPressed: _exporting ? null : _downloadExport,
+                    onPressed: _exporting ? null : _showExportChoice,
                     icon: _exporting
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.download),
@@ -400,12 +589,129 @@ class _AnalysePageState extends State<AnalysePage> {
                     children: _filteredBenevoles.map((b) => _buildBenevoleTile(b, theme)).toList(),
                   ),
                 ),
+              const SizedBox(height: 24),
+              _buildBenevolesManuelsSection(theme, secondaryColor),
               const SizedBox(height: 32),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildBenevolesManuelsSection(ThemeData theme, Color secondaryColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Bénévoles inscrits à la main',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Ajoutez des bénévoles qui ne souhaitent pas créer de compte. Ils figureront dans les exports PDF et Excel. Année : $_anneeExport.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _manuelNomController,
+                decoration: const InputDecoration(
+                  labelText: 'Nom',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _manuelPrenomController,
+                decoration: const InputDecoration(
+                  labelText: 'Prénom',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _addBenevoleManuel,
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter'),
+              style: FilledButton.styleFrom(backgroundColor: secondaryColor),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_benevolesManuels.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Aucun bénévole inscrit à la main pour $_anneeExport.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Column(
+              children: _benevolesManuels.map((b) => ListTile(
+                title: Text('${b['prenom'] ?? ''} ${b['nom'] ?? ''}'.trim()),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () => _deleteBenevoleManuel((b['id'] as num?)?.toInt() ?? 0),
+                ),
+              )).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _addBenevoleManuel() async {
+    final nom = _manuelNomController.text.trim();
+    final prenom = _manuelPrenomController.text.trim();
+    if (nom.isEmpty || prenom.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nom et prénom requis'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    try {
+      await AnalyseService.addBenevoleManuel(widget.user.id, nom: nom, prenom: prenom, annee: _anneeExport);
+      _manuelNomController.clear();
+      _manuelPrenomController.clear();
+      if (!mounted) return;
+      _loadBenevolesManuels();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bénévole ajouté'), backgroundColor: AppColors.primary),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('ApiException (400): ', '')), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _deleteBenevoleManuel(int id) async {
+    try {
+      await AnalyseService.deleteBenevoleManuel(widget.user.id, id);
+      if (!mounted) return;
+      _loadBenevolesManuels();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bénévole supprimé'), backgroundColor: AppColors.primary),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('ApiException (404): ', '')), backgroundColor: Colors.red),
+      );
+    }
   }
 
   /// Encart Places occupées : X / Y (Z %) dans la page Analyse

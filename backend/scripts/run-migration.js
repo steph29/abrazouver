@@ -74,6 +74,18 @@ async function runMigration(options = {}) {
         ('accueilDescription', '')
     `);
 
+    // Créer benevoles_manuels (inscrits à la main, sans compte)
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS benevoles_manuels (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(100) NOT NULL,
+        prenom VARCHAR(100) NOT NULL,
+        annee INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_annee (annee)
+      )
+    `).catch(() => {});
+
     // Créer contact_messages ici (résilient si schema.sql non mis à jour via FTP)
     await conn.query(`
       CREATE TABLE IF NOT EXISTS contact_messages (

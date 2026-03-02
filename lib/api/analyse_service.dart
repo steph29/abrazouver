@@ -21,14 +21,48 @@ class AnalyseService {
     );
   }
 
-  /// Télécharge le fichier XLSX des bénévoles inscrits.
-  static Future<Uint8List?> downloadExport(int adminUserId) async {
-    final url = Uri.parse('${ApiService.baseUrl}/admin/analyse/export');
+  /// Télécharge le fichier XLSX des bénévoles inscrits (+ bénévoles manuels pour l'année).
+  static Future<Uint8List?> downloadExport(int adminUserId, {int? annee}) async {
+    final qs = annee != null ? '?annee=$annee' : '';
+    final url = Uri.parse('${ApiService.baseUrl}/admin/analyse/export$qs');
     final resp = await http.get(
       url,
       headers: {'X-User-Id': adminUserId.toString()},
     );
     if (resp.statusCode != 200) return null;
     return resp.bodyBytes;
+  }
+
+  /// Liste des bénévoles inscrits à la main pour une année.
+  static Future<List<Map<String, dynamic>>> getBenevolesManuels(int adminUserId, int annee) async {
+    final data = await ApiService.get(
+      '/admin/analyse/benevoles-manuels?annee=$annee',
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+    final list = data['benevoles'] as List?;
+    return list?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+  }
+
+  /// Ajoute un bénévole inscrit à la main.
+  static Future<Map<String, dynamic>> addBenevoleManuel(
+    int adminUserId, {
+    required String nom,
+    required String prenom,
+    int? annee,
+  }) async {
+    final an = annee ?? DateTime.now().year;
+    return ApiService.post(
+      '/admin/analyse/benevoles-manuels',
+      {'nom': nom, 'prenom': prenom, 'annee': an},
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+  }
+
+  /// Supprime un bénévole inscrit à la main.
+  static Future<void> deleteBenevoleManuel(int adminUserId, int id) async {
+    await ApiService.delete(
+      '/admin/analyse/benevoles-manuels/$id',
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
   }
 }

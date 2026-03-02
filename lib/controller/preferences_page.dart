@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../api/admin_users_service.dart';
 import '../api/preferences_service.dart';
 import '../utils/logo_picker.dart';
 import '../model/user.dart';
@@ -27,6 +28,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
   bool _loading = false;
   bool _saving = false;
   String? _error;
+  List<Map<String, dynamic>> _adminUsers = [];
+  bool _adminUsersLoading = false;
 
   static const int _maxLogoBytes = 2 * 1024 * 1024; // 2 Mo
 
@@ -39,6 +42,20 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _accueilTitreController = TextEditingController();
     _accueilDescriptionController = TextEditingController();
     _loadPreferences();
+    _loadAdminUsers();
+  }
+
+  Future<void> _loadAdminUsers() async {
+    setState(() => _adminUsersLoading = true);
+    try {
+      final users = await AdminUsersService.getUsers(widget.user.id);
+      if (mounted) setState(() {
+        _adminUsers = users;
+        _adminUsersLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _adminUsersLoading = false);
+    }
   }
 
   @override
@@ -287,6 +304,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
             _buildContactEmailSection(),
             const SizedBox(height: 24),
             _buildAccueilSection(),
+            const SizedBox(height: 24),
+            _buildAdminRolesSection(),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: _saving ? null : _save,
@@ -502,6 +521,110 @@ class _PreferencesPageState extends State<PreferencesPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildAdminRolesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Rôles administrateur',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Accordez ou retirez le rôle admin aux utilisateurs inscrits. Les admins peuvent gérer postes, préférences, analyse et messages.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        if (_adminUsersLoading)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_adminUsers.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Aucun utilisateur inscrit pour le moment.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Column(
+              children: _adminUsers.map((u) {
+                final id = (u['id'] as num?)?.toInt() ?? 0;
+                final isAdmin = u['isAdmin'] == true;
+                final isCurrentUser = id == widget.user.id;
+                final name = '${u['prenom'] ?? ''} ${u['nom'] ?? ''}'.trim();
+                final email = u['email'] ?? '';
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                    child: Text(
+                      (name.isNotEmpty ? name[0] : email.isNotEmpty ? email[0] : '?').toUpperCase(),
+                      style: TextStyle(color: Theme.of(context).colorScheme.primaryContainer),
+                    ),
+                  ),
+                  title: Text(name.isNotEmpty ? name : email),
+                  subtitle: email.isNotEmpty ? Text(email, style: const TextStyle(fontSize: 12)) : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAdmin)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text(
+                            'Admin',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      Switch(
+                        value: isAdmin,
+                        onChanged: isCurrentUser
+                            ? null
+                            : (v) => _setUserRole(id, v),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _setUserRole(int targetId, bool isAdmin) async {
+    try {
+      await AdminUsersService.setUserRole(widget.user.id, targetId, isAdmin);
+      if (!mounted) return;
+      setState(() {
+        final idx = _adminUsers.indexWhere((u) => (u['id'] as num?)?.toInt() == targetId);
+        if (idx >= 0) _adminUsers[idx]['isAdmin'] = isAdmin;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isAdmin ? 'Droits admin accordés' : 'Droits admin retirés'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('ApiException (400): ', '').replaceAll('ApiException (403): ', '')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   Widget _buildContactEmailSection() {

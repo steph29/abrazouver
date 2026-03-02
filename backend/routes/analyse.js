@@ -21,16 +21,75 @@ function buildDateFilter(dateFrom, dateTo) {
   };
 }
 
+/** GET /api/admin/analyse/benevoles-manuels?annee=2025 - Liste des bénévoles inscrits à la main */
+router.get("/benevoles-manuels", async (req, res) => {
+  try {
+    const annee = parseInt(req.query.annee, 10) || new Date().getFullYear();
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      "SELECT id, nom, prenom, annee, created_at FROM benevoles_manuels WHERE annee = ? ORDER BY nom, prenom",
+      [annee]
+    );
+    res.json({ benevoles: rows });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** POST /api/admin/analyse/benevoles-manuels - Ajouter un bénévole inscrit à la main */
+router.post("/benevoles-manuels", async (req, res) => {
+  try {
+    const { nom, prenom } = req.body || {};
+    if (!nom || typeof nom !== "string" || !prenom || typeof prenom !== "string") {
+      return res.status(400).json({ message: "nom et prenom requis" });
+    }
+    const annee = parseInt(req.body.annee, 10) || new Date().getFullYear();
+    const pool = await getPool();
+    const [result] = await pool.query(
+      "INSERT INTO benevoles_manuels (nom, prenom, annee) VALUES (?, ?, ?)",
+      [nom.trim(), prenom.trim(), annee]
+    );
+    res.status(201).json({
+      id: result.insertId,
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      annee,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** DELETE /api/admin/analyse/benevoles-manuels/:id - Supprimer un bénévole inscrit à la main */
+router.delete("/benevoles-manuels/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ message: "ID invalide" });
+    const pool = await getPool();
+    const [result] = await pool.query("DELETE FROM benevoles_manuels WHERE id = ?", [id]);
+    if (result.affectedRows === 0) return res.status(404).json({ message: "Non trouvé" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 /** GET /api/admin/analyse/export - Export XLSX (doit être avant /) */
 router.get("/export", async (req, res) => {
   try {
     const pool = await getPool();
+    const anneeExport = parseInt(req.query.annee, 10) || new Date().getFullYear();
 
     const [benevoles] = await pool.query(
       `SELECT DISTINCT u.id, u.nom, u.prenom
        FROM inscriptions i
        JOIN users u ON u.id = i.user_id
        ORDER BY u.nom, u.prenom`
+    );
+
+    const [benevolesManuels] = await pool.query(
+      "SELECT nom, prenom FROM benevoles_manuels WHERE annee = ? ORDER BY nom, prenom",
+      [anneeExport]
     );
 
     const [[logoRow]] = await pool.query("SELECT pref_value FROM app_preferences WHERE pref_key = 'logo'");
@@ -68,6 +127,11 @@ router.get("/export", async (req, res) => {
     rowNum++;
 
     for (const b of benevoles) {
+      sheet.getCell(rowNum, 1).value = b.nom;
+      sheet.getCell(rowNum, 2).value = b.prenom;
+      rowNum++;
+    }
+    for (const b of benevolesManuels) {
       sheet.getCell(rowNum, 1).value = b.nom;
       sheet.getCell(rowNum, 2).value = b.prenom;
       rowNum++;

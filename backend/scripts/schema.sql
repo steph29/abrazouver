@@ -74,6 +74,16 @@ INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
   ('accueilTitre', ''),
   ('accueilDescription', '');
 
+-- Bénévoles inscrits manuellement (ne souhaitent pas créer de compte)
+CREATE TABLE IF NOT EXISTS benevoles_manuels (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nom VARCHAR(100) NOT NULL,
+  prenom VARCHAR(100) NOT NULL,
+  annee INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_annee (annee)
+);
+
 -- Messages envoyés depuis la page Contact (utilisateur -> admin)
 CREATE TABLE IF NOT EXISTS contact_messages (
   id INT AUTO_INCREMENT PRIMARY KEY,
