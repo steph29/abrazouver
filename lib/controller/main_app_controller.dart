@@ -139,7 +139,7 @@ class _MainAppControllerState extends State<MainAppController> {
     final adminPages = [
       const AdminPage(),
       PreferencesPage(user: _user),
-      const AnalysePage(),
+      AnalysePage(user: _user),
       NotificationsPage(user: _user, onViewed: _onNotificationsViewed),
     ];
     return adminPages[index - compteIndex - 1];
@@ -189,7 +189,7 @@ class _MainAppControllerState extends State<MainAppController> {
                 Text(
                   _user.email,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
                   ),
                 ),
@@ -317,7 +317,7 @@ class _MainAppControllerState extends State<MainAppController> {
                 child: Column(
                   children: [
                     CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.2),
+                      backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2),
                       child: Text(
                         (_user.prenom.isNotEmpty
                                 ? _user.prenom[0]

@@ -52,7 +52,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: AppColors.surface,
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -60,13 +60,13 @@ class AppTheme {
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return secondaryColor;
+        thumbColor: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) return secondaryColor;
           return null;
         }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return secondaryColor.withValues(alpha: 0.5);
+        trackColor: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) {
+            return secondaryColor.withOpacity(0.5);
           }
           return null;
         }),

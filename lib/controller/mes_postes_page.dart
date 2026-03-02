@@ -226,7 +226,7 @@ class _MesPostesPageState extends State<MesPostesPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(12),

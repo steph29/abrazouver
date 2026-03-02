@@ -231,7 +231,7 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: canClick ? () => _inscrire(creneau, poste) : null,
@@ -269,7 +269,7 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
                   )
                 else ...[
                   Text(
-                    '${creneau.placesRestantes}/${creneau.nbBenevolesRequis}',
+                    '${creneau.placesRestantes}/${creneau.nbBenevolesRequis} (${(creneau.placesRestantes / creneau.nbBenevolesRequis * 100).round()} %)',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,

@@ -1,4 +1,14 @@
 require("dotenv").config({ path: require("path").join(__dirname, ".env") });
+
+// Capturer les erreurs non gérées pour éviter les crashes silencieux (502)
+process.on("uncaughtException", (err) => {
+  console.error("❌ uncaughtException:", err.message);
+  console.error(err.stack);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ unhandledRejection:", reason);
+});
+
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
@@ -8,6 +18,7 @@ const { isAdmin } = require("./middleware/isAdmin");
 const inscriptionsRoutes = require("./routes/inscriptions");
 const preferencesRoutes = require("./routes/preferences");
 const { contactRouter, contactAdminRouter } = require("./routes/contact");
+const analyseRoutes = require("./routes/analyse");
 const crudRoutes = require("./routes/crud");
 const { getPool } = require("./config/database");
 const { hasSmtp } = require("./config/email");
@@ -40,9 +51,16 @@ app.use("/api/benevoles/inscriptions", inscriptionsRoutes);
 app.use("/api/preferences", preferencesRoutes);
 app.use("/api/contact", contactRouter);
 app.use("/api/admin/contact-messages", contactAdminRouter);
+app.use("/api/admin/analyse", isAdmin, analyseRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/2fa", twofaRoutes);
 app.use("/api", crudRoutes);
+
+// Middleware d'erreur (attrape les erreurs passées à next(err))
+app.use((err, req, res, next) => {
+  console.error("❌ Erreur API:", err.message);
+  res.status(500).json({ message: err.message || "Erreur serveur" });
+});
 
 async function start() {
   await getPool();

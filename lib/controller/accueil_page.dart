@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
+
 import '../api/preferences_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/simple_html_text.dart';
 
 class AccueilPage extends StatefulWidget {
   const AccueilPage({super.key});
@@ -92,19 +93,12 @@ class _AccueilPageState extends State<AccueilPage> {
                 if (_titre.isNotEmpty && _description.trim().isNotEmpty)
                   const SizedBox(height: 16),
                 if (_description.trim().isNotEmpty)
-                  Html(
+                  SimpleHtmlText(
                     data: _description.trim(),
-                    style: {
-                      'body': Style(
-                        margin: Margins.zero,
-                        padding: HtmlPaddings.zero,
-                        fontSize: FontSize(16),
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      'p': Style(
-                        margin: Margins.only(bottom: 12),
-                      ),
-                    },
+                    baseStyle: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 16,
+                    ),
                   ),
               ] else
                 Text(

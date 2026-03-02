@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
 
-const RESERVED_TABLES = ['auth', 'admin', 'benevoles', 'health', '2fa', 'postes', 'creneaux', 'inscriptions'];
+const RESERVED_TABLES = [
+  'auth', 'admin', 'benevoles', 'health', '2fa',
+  'postes', 'creneaux', 'inscriptions', 'users', 'app_preferences', 'contact_messages',
+];
 
 function sanitizeTable(table) {
   return table.replace(/[^a-z0-9_]/gi, '');
@@ -29,9 +32,12 @@ router.get('/:table', async (req, res) => {
 
 router.get('/:table/:id', async (req, res) => {
   try {
-    const pool = await getPool();
     const table = sanitizeTable(req.params.table);
     if (!table) return res.status(400).json({ message: 'Table invalide' });
+    if (isReserved(table)) {
+      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
+    }
+    const pool = await getPool();
     const [rows] = await pool.query(
       `SELECT * FROM \`${table}\` WHERE id = ?`,
       [req.params.id]
@@ -76,9 +82,12 @@ router.post('/:table', async (req, res) => {
 
 router.put('/:table/:id', async (req, res) => {
   try {
-    const pool = await getPool();
     const table = sanitizeTable(req.params.table);
     if (!table) return res.status(400).json({ message: 'Table invalide' });
+    if (isReserved(table)) {
+      return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
+    }
+    const pool = await getPool();
     const data = { ...req.body, updated_at: new Date() };
     const fields = Object.keys(data);
     const setClause = fields.map((f) => `\`${f}\` = ?`).join(', ');
@@ -99,10 +108,10 @@ router.put('/:table/:id', async (req, res) => {
 router.delete('/:table/:id', async (req, res) => {
   try {
     const table = sanitizeTable(req.params.table);
+    if (!table) return res.status(400).json({ message: 'Table invalide' });
     if (isReserved(table)) {
       return res.status(400).json({ message: `"${table}" n'est pas une table CRUD.` });
     }
-    if (!table) return res.status(400).json({ message: 'Table invalide' });
     const pool = await getPool();
     const [result] = await pool.query(
       `DELETE FROM \`${table}\` WHERE id = ?`,

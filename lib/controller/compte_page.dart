@@ -383,7 +383,7 @@ class _ComptePageState extends State<ComptePage> {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.textSecondary.withValues(alpha: 0.2)),
+                  border: Border.all(color: AppColors.textSecondary.withOpacity(0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
