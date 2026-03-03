@@ -36,6 +36,16 @@ flutter pub get
 flutter run
 ```
 
+**Build web** (app à la racine) :
+```bash
+flutter build web
+```
+
+Si l'app est servie en HTTP (sans HTTPS) : le Service Worker échoue. Utiliser alors :
+```bash
+flutter build web --pwa-strategy=none
+```
+
 ### Backend API
 
 ```bash

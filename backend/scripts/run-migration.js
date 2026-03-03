@@ -36,8 +36,14 @@ async function runMigration(options = {}) {
   const sql = fs.readFileSync(schemaPath, "utf8");
   const statements = sql
     .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith("--"));
+    .map((s) =>
+      s
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("--"))
+        .join("\n")
+        .trim()
+    )
+    .filter((s) => s.length > 0);
 
   const dbConfig = {
     host: process.env.DB_HOST || "localhost",

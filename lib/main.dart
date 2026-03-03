@@ -8,6 +8,7 @@ import 'api/api_service.dart';
 import 'api/session_service.dart';
 import 'controller/login_page.dart';
 import 'controller/main_app_controller.dart';
+import 'controller/tenants_config_page.dart';
 import 'model/user.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
@@ -15,17 +16,31 @@ import 'theme/theme_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
-    try {
-      final uri = Uri.base.resolve('config.json');
-      final resp = await http.get(uri);
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body) as Map<String, dynamic>?;
-        final baseUrl = data?['apiBaseUrl'] as String?;
-        if (baseUrl != null && baseUrl.isNotEmpty) {
-          ApiService.setBaseUrl(baseUrl);
+    final host = Uri.base.host;
+    // app.xxx ou www.app.xxx → api.xxx (multi-tenant)
+    String? apiHost;
+    if (host.startsWith('app.')) {
+      apiHost = host.replaceFirst(RegExp(r'^app\.'), 'api.');
+    } else if (host.startsWith('www.app.')) {
+      apiHost = host.replaceFirst(RegExp(r'^www\.app\.'), 'api.');
+    }
+    if (apiHost != null) {
+      // Toujours HTTPS en prod (évite erreur CORS sur redirection http→https)
+      final scheme = host.contains('localhost') ? Uri.base.scheme : 'https';
+      ApiService.setBaseUrl('$scheme://$apiHost/api');
+    } else {
+      try {
+        final uri = Uri.base.resolve('config.json');
+        final resp = await http.get(uri);
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>?;
+          final baseUrl = data?['apiBaseUrl'] as String?;
+          if (baseUrl != null && baseUrl.isNotEmpty) {
+            ApiService.setBaseUrl(baseUrl);
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
   runApp(const MyApp());
 }
@@ -57,7 +72,7 @@ class _MyAppState extends State<MyApp> {
       updateTheme: _updateTheme,
       updateLogo: _updateLogo,
       child: MaterialApp(
-        title: 'Abrazouver',
+        title: 'Abrazouvert',
         theme: _theme,
         home: _InitialPage(onThemeReady: _updateTheme),
         debugShowCheckedModeBanner: false,
@@ -77,10 +92,19 @@ class _InitialPage extends StatefulWidget {
 }
 
 class _InitialPageState extends State<_InitialPage> {
+  static bool get _isAdminHost {
+    if (!kIsWeb) return false;
+    final host = Uri.base.host;
+    return host.contains('.admin.') || host.startsWith('admin.');
+  }
+
   Future<User?> _loadSession() => SessionService.loadUser();
 
   @override
   Widget build(BuildContext context) {
+    if (_isAdminHost) {
+      return TenantsConfigPage(onThemeReady: widget.onThemeReady);
+    }
     return FutureBuilder<User?>(
       future: _loadSession(),
       builder: (context, snap) {
