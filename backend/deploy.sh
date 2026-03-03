@@ -15,12 +15,15 @@ npm ci --omit=dev 2>/dev/null || npm install --production 2>/dev/null || npm ins
 echo "   ✓ Dépendances à jour"
 echo ""
 
-# 2. Migration base de données (crée/met à jour toutes les tables de schema.sql)
+# 2. Script provision exécutable
+chmod +x scripts/provision-ssl.sh 2>/dev/null || true
+
+# 3. Migration base de données (crée/met à jour toutes les tables de schema.sql)
 echo "2/3 - Migration base de données..."
 npm run migrate
 echo ""
 
-# 3. Redémarrage PM2
+# 4. Redémarrage PM2
 echo "3/3 - Redémarrage de l'API..."
 if pm2 describe abrazouver-api &>/dev/null; then
   pm2 restart abrazouver-api

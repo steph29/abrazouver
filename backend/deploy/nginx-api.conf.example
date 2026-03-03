@@ -1,20 +1,23 @@
-# Exemple de configuration Nginx pour l'API en HTTPS
-# À placer dans /etc/nginx/sites-available/ puis activer
-# Remplacer api.votredomaine.com par votre sous-domaine API
+# Exemple de configuration Nginx pour l'API (multi-tenant)
+# api.steph-verardo.fr, api.admin.steph-verardo.fr, api.enest-fest.steph-verardo.fr, etc.
+# Le motif ~^api\..+\.steph-verardo\.fr$ accepte tout api.XXX.steph-verardo.fr
+#
+# CORS : géré UNIQUEMENT par Express (server.js) via CORS_ORIGINS dans .env
+# Ne pas ajouter d'en-têtes CORS dans nginx (risque de doublons = erreur navigateur)
 
 server {
     listen 80;
-    server_name api.votredomaine.com;
-    return 301 https://$server_name$request_uri;
+    server_name api.steph-verardo.fr ~^api\..+\.steph-verardo\.fr$;
+    return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name api.votredomaine.com;
+    server_name api.steph-verardo.fr ~^api\..+\.steph-verardo\.fr$;
 
-    # Certificats Let's Encrypt (générés par certbot)
-    ssl_certificate /etc/letsencrypt/live/api.votredomaine.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.votredomaine.com/privkey.pem;
+    # Certificats Let's Encrypt - sudo certbot certificates pour voir le chemin
+    ssl_certificate /etc/letsencrypt/live/api.steph-verardo.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.steph-verardo.fr/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -22,6 +25,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

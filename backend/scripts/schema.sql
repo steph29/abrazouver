@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS creneaux (
 CREATE INDEX idx_creneaux_poste ON creneaux(poste_id);
 CREATE INDEX idx_creneaux_dates ON creneaux(date_debut, date_fin);
 
+-- Bénévoles ajoutés manuellement (hors inscription app)
+CREATE TABLE IF NOT EXISTS benevoles_manuels (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nom VARCHAR(100) NOT NULL,
+  prenom VARCHAR(100) NOT NULL,
+  email VARCHAR(255) DEFAULT NULL,
+  telephone VARCHAR(20) DEFAULT NULL,
+  creneau_id INT DEFAULT NULL,
+  notes TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_benevoles_manuels_creneau (creneau_id),
+  FOREIGN KEY (creneau_id) REFERENCES creneaux(id) ON DELETE SET NULL
+);
+
 -- Inscriptions des bénévoles aux créneaux
 CREATE TABLE IF NOT EXISTS inscriptions (
   id INT AUTO_INCREMENT PRIMARY KEY,

@@ -1,0 +1,40 @@
+# Exemple de configuration Nginx pour l'app Flutter (multi-tenant)
+# app.xxx.steph-verardo.fr ou www.app.xxx.steph-verardo.fr
+# App servie à la racine (sans --base-href, ou --base-href /)
+
+# Redirection HTTP → HTTPS
+server {
+    listen 80;
+    server_name app.steph-verardo.fr app.admin.steph-verardo.fr ~^app\..+\.steph-verardo\.fr$ ~^www\.app\..+\.steph-verardo\.fr$;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name app.steph-verardo.fr app.admin.steph-verardo.fr ~^app\..+\.steph-verardo\.fr$ ~^www\.app\..+\.steph-verardo\.fr$;
+
+    # Certificats Let's Encrypt - certbot avec --cert-name app.steph-verardo.fr
+    # Voir HTTPS_APP.md pour la commande complète
+    ssl_certificate /etc/letsencrypt/live/app.steph-verardo.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.steph-verardo.fr/privkey.pem;
+
+    root /var/www/abrazouver/app;
+    index index.html;
+
+    # CSP : autorise l'app Flutter + API pour tous les sous-domaines (*.steph-verardo.fr)
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.steph-verardo.fr https://api.admin.steph-verardo.fr https://api.enest-fest.steph-verardo.fr https://*.steph-verardo.fr; font-src 'self';";
+
+    location = /favicon.ico {
+        try_files /favicon.png =404;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
