@@ -8,6 +8,7 @@ import 'api/api_service.dart';
 import 'api/session_service.dart';
 import 'controller/login_page.dart';
 import 'controller/main_app_controller.dart';
+import 'controller/reset_password_page.dart';
 import 'controller/tenants_config_page.dart';
 import 'model/user.dart';
 import 'theme/app_theme.dart';
@@ -104,6 +105,13 @@ class _InitialPageState extends State<_InitialPage> {
   Widget build(BuildContext context) {
     if (_isAdminHost) {
       return TenantsConfigPage(onThemeReady: widget.onThemeReady);
+    }
+    if (kIsWeb) {
+      final path = Uri.base.path;
+      final token = Uri.base.queryParameters['token'];
+      if (path.contains('reset-password') && token != null && token.isNotEmpty) {
+        return ResetPasswordPage(token: token, onThemeReady: widget.onThemeReady);
+      }
     }
     return FutureBuilder<User?>(
       future: _loadSession(),

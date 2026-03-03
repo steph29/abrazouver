@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { getPool } = require('../config/database');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { sendMail } = require('../config/email');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'abrazouver-2fa-secret-change-in-production';
 
@@ -197,6 +199,123 @@ router.post('/register', async (req, res) => {
       prenom: prenom.trim(),
     });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** POST /auth/forgot-password - Demande de réinitialisation (envoi email avec lien) */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email, appBaseUrl } = req.body;
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: 'Email requis' });
+    }
+
+    const pool = await getPool();
+    const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email.trim().toLowerCase()]);
+    if (rows.length === 0) {
+      return res.json({ message: 'Si cet email existe, un lien de réinitialisation vous a été envoyé.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await pool.query(
+      'UPDATE users SET password_reset_token = ?, password_reset_expires_at = ? WHERE id = ?',
+      [token, expiresAt, rows[0].id]
+    );
+
+    const baseUrl = (appBaseUrl || req.get('origin') || '').replace(/\/$/, '');
+    const resetLink = baseUrl ? `${baseUrl}/reset-password?token=${token}` : null;
+
+    if (resetLink) {
+      const sent = await sendMail({
+        to: email.trim().toLowerCase(),
+        subject: 'Abrazouver - Réinitialisation du mot de passe',
+        text: `Pour réinitialiser votre mot de passe, cliquez sur ce lien (valide 1 heure) :\n\n${resetLink}\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez cet email.`,
+        html: `<p>Pour réinitialiser votre mot de passe, <a href="${resetLink}">cliquez ici</a> (lien valide 1 heure).</p><p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.</p>`,
+      });
+      if (!sent) {
+        return res.status(503).json({
+          message: 'L\'envoi d\'email n\'est pas configuré. Contactez l\'administrateur pour réinitialiser votre mot de passe.',
+        });
+      }
+    }
+
+    res.json({ message: 'Si cet email existe, un lien de réinitialisation vous a été envoyé.' });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** POST /auth/reset-password - Réinitialisation avec token du lien email */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token et nouveau mot de passe requis' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 6 caractères' });
+    }
+
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      'SELECT id FROM users WHERE password_reset_token = ? AND password_reset_expires_at > NOW()',
+      [token]
+    );
+    if (rows.length === 0) {
+      return res.status(400).json({ message: 'Lien invalide ou expiré. Demandez une nouvelle réinitialisation.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires_at = NULL WHERE id = ?',
+      [hash, rows[0].id]
+    );
+
+    res.json({ message: 'Mot de passe modifié. Vous pouvez vous connecter.' });
+  } catch (err) {
+    console.error('Reset password error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** PUT /auth/password/:id - Modifier le mot de passe (utilisateur connecté, X-User-Id requis) */
+router.put('/password/:id', async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = parseInt(req.params.id, 10);
+    const headerUserId = req.headers['x-user-id'];
+
+    if (isNaN(userId) || !headerUserId || parseInt(headerUserId, 10) !== userId) {
+      return res.status(401).json({ message: 'Authentification requise' });
+    }
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Mot de passe actuel et nouveau mot de passe requis' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Le nouveau mot de passe doit contenir au moins 6 caractères' });
+    }
+
+    const pool = await getPool();
+    const [rows] = await pool.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ message: 'Mot de passe actuel incorrect' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
+
+    res.json({ message: 'Mot de passe modifié' });
+  } catch (err) {
+    console.error('Update password error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });

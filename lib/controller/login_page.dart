@@ -3,6 +3,7 @@ import '../api/auth_service.dart';
 import '../api/session_service.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
+import 'forgot_password_page.dart';
 import 'main_app_controller.dart';
 import 'signup_page.dart';
 
@@ -243,7 +244,21 @@ class _LoginPageState extends State<LoginPage> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ForgotPasswordPage(onThemeReady: widget.onThemeReady),
+                        ),
+                      );
+                    },
+                    child: const Text('Mot de passe perdu'),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 FilledButton(
                   onPressed: _isLoading ? null : _login,
                   style: FilledButton.styleFrom(

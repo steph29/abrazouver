@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   two_factor_secret VARCHAR(64) DEFAULT NULL,
   two_factor_enabled TINYINT(1) DEFAULT 0,
   is_admin TINYINT(1) DEFAULT 0,
+  password_reset_token VARCHAR(64) DEFAULT NULL,
+  password_reset_expires_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

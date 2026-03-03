@@ -23,10 +23,17 @@ class _ComptePageState extends State<ComptePage> {
   late TextEditingController _prenomController;
   late TextEditingController _emailController;
   late TextEditingController _telephoneController;
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
+  final _passwordFormKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _twoFactorEnabled = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
 
   @override
   void initState() {
@@ -44,6 +51,9 @@ class _ComptePageState extends State<ComptePage> {
     _prenomController.dispose();
     _emailController.dispose();
     _telephoneController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -84,6 +94,134 @@ class _ComptePageState extends State<ComptePage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _updatePassword() async {
+    if (!_passwordFormKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.updatePassword(
+        widget.user.id,
+        _currentPasswordController.text,
+        _newPasswordController.text,
+      );
+      if (!mounted) return;
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mot de passe modifié'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceAll('ApiException (401): ', '').replaceAll('ApiException (400): ', ''),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildPasswordSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.textSecondary.withOpacity(0.2)),
+      ),
+      child: Form(
+        key: _passwordFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_rounded, color: AppColors.primaryDark, size: 28),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Modifier le mot de passe',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _currentPasswordController,
+              obscureText: _obscureCurrent,
+              decoration: InputDecoration(
+                labelText: 'Mot de passe actuel',
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureCurrent ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Mot de passe actuel requis';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newPasswordController,
+              obscureText: _obscureNew,
+              decoration: InputDecoration(
+                labelText: 'Nouveau mot de passe',
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureNew ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Nouveau mot de passe requis';
+                if (v.length < 6) return 'Au moins 6 caractères';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: 'Confirmer le nouveau mot de passe',
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Confirmation requise';
+                if (v != _newPasswordController.text) return 'Les mots de passe ne correspondent pas';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _updatePassword,
+              icon: const Icon(Icons.lock_reset_rounded, size: 18),
+              label: const Text('Modifier le mot de passe'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showSetup2FADialog() async {
@@ -377,6 +515,8 @@ class _ComptePageState extends State<ComptePage> {
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
               ),
+              const SizedBox(height: 24),
+              _buildPasswordSection(),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),

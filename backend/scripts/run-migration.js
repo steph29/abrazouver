@@ -71,6 +71,8 @@ async function runMigration(options = {}) {
       )
     `);
     await conn.query("ALTER TABLE app_preferences MODIFY pref_value MEDIUMTEXT").catch(() => {});
+    await conn.query("ALTER TABLE users ADD COLUMN password_reset_token VARCHAR(64) DEFAULT NULL").catch(() => {});
+    await conn.query("ALTER TABLE users ADD COLUMN password_reset_expires_at DATETIME DEFAULT NULL").catch(() => {});
     await conn.query(`
       INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES
         ('primaryColor', '#4CAF50'),

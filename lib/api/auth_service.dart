@@ -61,4 +61,28 @@ class AuthService {
       'code': code,
     });
   }
+
+  /// Demande de réinitialisation du mot de passe (envoi email avec lien)
+  static Future<Map<String, dynamic>> forgotPassword(String email, {String? appBaseUrl}) async {
+    final body = <String, dynamic>{'email': email};
+    if (appBaseUrl != null) body['appBaseUrl'] = appBaseUrl;
+    return ApiService.post('/auth/forgot-password', body);
+  }
+
+  /// Réinitialisation du mot de passe avec le token du lien email
+  static Future<void> resetPassword(String token, String newPassword) async {
+    await ApiService.post('/auth/reset-password', {
+      'token': token,
+      'newPassword': newPassword,
+    });
+  }
+
+  /// Modification du mot de passe (utilisateur connecté)
+  static Future<void> updatePassword(int userId, String currentPassword, String newPassword) async {
+    await ApiService.put(
+      '/auth/password/$userId',
+      {'currentPassword': currentPassword, 'newPassword': newPassword},
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
 }
