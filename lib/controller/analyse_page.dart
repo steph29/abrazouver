@@ -13,6 +13,7 @@ import '../theme/theme_provider.dart';
 import '../utils/download_helper.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
+import 'rappels_tab.dart';
 
 class AnalysePage extends StatefulWidget {
   final User user;
@@ -457,10 +458,36 @@ class _AnalysePageState extends State<AnalysePage> {
     final theme = Theme.of(context);
     final secondaryColor = theme.colorScheme.primaryContainer;
 
-    return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: _loadData,
-        child: SingleChildScrollView(
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Material(
+            color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+            child: TabBar(
+              tabs: const [
+                Tab(icon: Icon(Icons.bar_chart), text: 'Statistiques'),
+                Tab(icon: Icon(Icons.email), text: 'Email'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                SafeArea(child: _buildStatsTab(theme, secondaryColor)),
+                SafeArea(child: RappelsTab(user: widget.user)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsTab(ThemeData theme, Color secondaryColor) {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -706,7 +733,6 @@ class _AnalysePageState extends State<AnalysePage> {
             ],
           ),
         ),
-      ),
     );
   }
 

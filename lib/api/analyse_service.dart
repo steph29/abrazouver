@@ -83,4 +83,52 @@ class AnalyseService {
       extraHeaders: {'X-User-Id': adminUserId.toString()},
     );
   }
+
+  /// Liste des bénévoles pour envoi de rappels (avec email).
+  static Future<List<Map<String, dynamic>>> getRappelsBenevoles(int adminUserId) async {
+    final data = await ApiService.get(
+      '/admin/analyse/rappels/benevoles',
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+    final list = data['benevoles'] as List?;
+    return list?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+  }
+
+  /// Liste des templates email pour rappels.
+  static Future<List<Map<String, dynamic>>> getRappelsTemplates(int adminUserId) async {
+    final data = await ApiService.get(
+      '/admin/analyse/rappels/templates',
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+    final list = data['templates'] as List?;
+    return list?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+  }
+
+  /// Envoie les emails de rappel.
+  static Future<Map<String, dynamic>> sendRappels(
+    int adminUserId, {
+    required String subject,
+    required String body,
+    List<int>? recipientIds,
+    bool sendToAll = false,
+    String? templateId,
+    String? attachmentName,
+    String? attachmentBase64,
+  }) async {
+    final bodyData = <String, dynamic>{
+      'subject': subject,
+      'body': body,
+      'sendToAll': sendToAll,
+      if (templateId != null) 'templateId': templateId,
+      if (recipientIds != null && recipientIds.isNotEmpty) 'recipientIds': recipientIds,
+    };
+    if (attachmentName != null && attachmentBase64 != null) {
+      bodyData['attachment'] = {'name': attachmentName, 'content': attachmentBase64};
+    }
+    return ApiService.post(
+      '/admin/analyse/rappels/send',
+      bodyData,
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+  }
 }

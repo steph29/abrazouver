@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { getPool } = require("../config/database");
 const ExcelJS = require("exceljs");
+const { sendMail } = require("../config/email");
 
 /** Construit les clauses WHERE pour filtrer par date et postes */
 function buildCreneauFilter(dateFrom, dateTo, posteIds) {
@@ -27,6 +28,222 @@ function buildCreneauFilter(dateFrom, dateTo, posteIds) {
     params,
   };
 }
+
+/** Templates pour les rappels email */
+const RAPPEL_TEMPLATES = {
+  rappel_creneaux: {
+    id: "rappel_creneaux",
+    nom: "Rappel de vos créneaux",
+    subject: "Rappel : Vos créneaux de bénévolat",
+    bodyTemplate: "Bonjour {{prenom}},\n\nVoici le rappel de vos créneaux inscrits :\n\n{{creneaux}}\n\nÀ bientôt !",
+    personalise: true,
+  },
+  remerciement: {
+    id: "remerciement",
+    nom: "Remerciement",
+    subject: "Merci pour votre engagement !",
+    bodyTemplate: "Bonjour {{prenom}},\n\nMerci pour votre engagement et votre participation. Votre aide est précieuse !\n\nCordialement",
+    personalise: false,
+  },
+  personnalise: {
+    id: "personnalise",
+    nom: "Message personnalisé",
+    subject: "",
+    bodyTemplate: "",
+    personalise: false,
+  },
+};
+
+function formatCreneauForEmail(p) {
+  const d = p.dateDebut ? new Date(p.dateDebut) : null;
+  const f = p.dateFin ? new Date(p.dateFin) : null;
+  if (!d) return (p.posteTitre || "Poste") + " - Date non définie";
+  const pad = (n) => String(n).padStart(2, "0");
+  const day = `${d.getDate()}/${pad(d.getMonth() + 1)}`;
+  const timeStart = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const timeEnd = f ? `${pad(f.getHours())}:${pad(f.getMinutes())}` : "";
+  return `• ${p.posteTitre || "Poste"} : ${day} ${timeStart}${timeEnd ? ` - ${timeEnd}` : ""}`;
+}
+
+/** GET /api/admin/analyse/rappels/benevoles - Liste tous les bénévoles (app) avec email pour envoi rappels */
+router.get("/rappels/benevoles", async (req, res) => {
+  try {
+    const pool = await getPool();
+    const [inscriptionsRows] = await pool.query(
+      `SELECT u.id, u.nom, u.prenom, u.email,
+              i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre, p.id as poste_id
+       FROM inscriptions i
+       JOIN users u ON u.id = i.user_id
+       JOIN creneaux c ON c.id = i.creneau_id
+       JOIN postes p ON p.id = c.poste_id
+       ORDER BY u.nom, u.prenom, c.date_debut`
+    );
+    const benevolesMap = new Map();
+    for (const row of inscriptionsRows) {
+      if (!benevolesMap.has(row.id)) {
+        benevolesMap.set(row.id, {
+          id: row.id,
+          nom: row.nom,
+          prenom: row.prenom,
+          email: row.email,
+          postes: [],
+        });
+      }
+      benevolesMap.get(row.id).postes.push({
+        posteTitre: row.poste_titre,
+        posteId: row.poste_id,
+        dateDebut: row.date_debut,
+        dateFin: row.date_fin,
+      });
+    }
+    const benevoles = [...benevolesMap.values()].filter((b) => b.email);
+    res.json({ benevoles });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** GET /api/admin/analyse/rappels/templates - Liste des templates */
+router.get("/rappels/templates", (_req, res) => {
+  res.json({
+    templates: Object.values(RAPPEL_TEMPLATES).map((t) => ({
+      id: t.id,
+      nom: t.nom,
+      subject: t.subject,
+      bodyTemplate: t.bodyTemplate,
+      personalise: t.personalise,
+    })),
+  });
+});
+
+/** POST /api/admin/analyse/rappels/send - Envoi emails rappels */
+router.post("/rappels/send", async (req, res) => {
+  try {
+    const { recipientIds, sendToAll, templateId, subject, body, attachment } = req.body || {};
+    if (!subject || typeof subject !== "string" || subject.trim().length === 0) {
+      return res.status(400).json({ message: "Objet du mail requis" });
+    }
+    if (!body || typeof body !== "string" || body.trim().length === 0) {
+      return res.status(400).json({ message: "Corps du mail requis" });
+    }
+
+    const pool = await getPool();
+    let benevoles = [];
+    if (sendToAll) {
+      const [rows] = await pool.query(
+        `SELECT DISTINCT u.id, u.nom, u.prenom, u.email FROM inscriptions i
+         JOIN users u ON u.id = i.user_id WHERE u.email IS NOT NULL AND u.email != ''`
+      );
+      const ids = rows.map((r) => r.id);
+      const [insc] = await pool.query(
+        `SELECT u.id, i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre
+         FROM inscriptions i JOIN users u ON u.id = i.user_id
+         JOIN creneaux c ON c.id = i.creneau_id JOIN postes p ON p.id = c.poste_id
+         WHERE u.id IN (${ids.map(() => "?").join(",")})
+         ORDER BY u.id, c.date_debut`,
+        ids
+      );
+      const byUser = new Map();
+      for (const r of rows) byUser.set(r.id, { ...r, postes: [] });
+      for (const r of insc) {
+        if (byUser.has(r.id)) {
+          byUser.get(r.id).postes.push({
+            posteTitre: r.poste_titre,
+            dateDebut: r.date_debut,
+            dateFin: r.date_fin,
+          });
+        }
+      }
+      benevoles = [...byUser.values()];
+    } else if (recipientIds && Array.isArray(recipientIds) && recipientIds.length > 0) {
+      const ids = recipientIds.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id));
+      if (ids.length === 0) return res.status(400).json({ message: "Aucun destinataire sélectionné" });
+      const [rows] = await pool.query(
+        `SELECT u.id, u.nom, u.prenom, u.email FROM users u
+         WHERE u.id IN (${ids.map(() => "?").join(",")}) AND u.email IS NOT NULL AND u.email != ''`,
+        ids
+      );
+      const [insc] = await pool.query(
+        `SELECT u.id, i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre
+         FROM inscriptions i JOIN users u ON u.id = i.user_id
+         JOIN creneaux c ON c.id = i.creneau_id JOIN postes p ON p.id = c.poste_id
+         WHERE u.id IN (${ids.map(() => "?").join(",")})
+         ORDER BY u.id, c.date_debut`,
+        ids
+      );
+      const byUser = new Map();
+      for (const r of rows) byUser.set(r.id, { ...r, postes: [] });
+      for (const r of insc) {
+        if (byUser.has(r.id)) {
+          byUser.get(r.id).postes.push({
+            posteTitre: r.poste_titre,
+            dateDebut: r.date_debut,
+            dateFin: r.date_fin,
+          });
+        }
+      }
+      benevoles = [...byUser.values()];
+    } else {
+      return res.status(400).json({ message: "Sélectionnez des destinataires ou « Envoyer à tous »" });
+    }
+
+    const template = templateId ? RAPPEL_TEMPLATES[templateId] : null;
+    const attachments = [];
+    if (attachment && attachment.name && attachment.content) {
+      attachments.push({
+        filename: attachment.name,
+        content: Buffer.from(attachment.content, "base64"),
+      });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    for (const b of benevoles) {
+      let subj = subject.trim();
+      let txt = body.trim();
+      const creneauxStr =
+        (b.postes || []).length > 0
+          ? (b.postes || []).map(formatCreneauForEmail).join("\n")
+          : "Aucun créneau enregistré";
+      if (template?.id === "rappel_creneaux") {
+        subj = template.subject || subject;
+        txt = (template.bodyTemplate || body)
+          .replace(/\{\{prenom\}\}/gi, b.prenom || "")
+          .replace(/\{\{nom\}\}/gi, b.nom || "")
+          .replace(/\{\{creneaux\}\}/gi, creneauxStr);
+      } else if (template?.id === "remerciement") {
+        subj = template.subject || subject;
+        txt = (template.bodyTemplate || body)
+          .replace(/\{\{prenom\}\}/gi, b.prenom || "")
+          .replace(/\{\{nom\}\}/gi, b.nom || "");
+      } else {
+        txt = body
+          .replace(/\{\{prenom\}\}/gi, b.prenom || "")
+          .replace(/\{\{nom\}\}/gi, b.nom || "")
+          .replace(/\{\{creneaux\}\}/gi, creneauxStr);
+      }
+      const ok = await sendMail({
+        to: b.email,
+        subject: subj,
+        text: txt,
+        html: txt.replace(/\n/g, "<br>"),
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+      if (ok) sent++;
+      else failed++;
+    }
+
+    res.json({
+      sent,
+      failed,
+      total: benevoles.length,
+      message: `${sent} email(s) envoyé(s)${failed > 0 ? `, ${failed} échec(s)` : ""}`,
+    });
+  } catch (err) {
+    console.error("Rappels send error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 /** GET /api/admin/analyse/benevoles-manuels?annee=2025 - Liste des bénévoles inscrits à la main */
 router.get("/benevoles-manuels", async (req, res) => {
