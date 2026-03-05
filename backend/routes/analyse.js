@@ -3,8 +3,8 @@ const router = express.Router();
 const { getPool } = require("../config/database");
 const ExcelJS = require("exceljs");
 
-/** Construit les clauses WHERE pour filtrer par date */
-function buildDateFilter(dateFrom, dateTo) {
+/** Construit les clauses WHERE pour filtrer par date et postes */
+function buildCreneauFilter(dateFrom, dateTo, posteIds) {
   const conditions = [];
   const params = [];
   if (dateFrom) {
@@ -14,6 +14,13 @@ function buildDateFilter(dateFrom, dateTo) {
   if (dateTo) {
     conditions.push("c.date_fin <= ?");
     params.push(dateTo);
+  }
+  if (posteIds && Array.isArray(posteIds) && posteIds.length > 0) {
+    const ids = posteIds.filter((id) => !Number.isNaN(parseInt(id, 10)));
+    if (ids.length > 0) {
+      conditions.push(`c.poste_id IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids.map((id) => parseInt(id, 10)));
+    }
   }
   return {
     where: conditions.length > 0 ? `AND ${conditions.join(" AND ")}` : "",
@@ -74,18 +81,45 @@ router.delete("/benevoles-manuels/:id", async (req, res) => {
   }
 });
 
-/** GET /api/admin/analyse/export - Export XLSX (doit être avant /) */
+/** GET /api/admin/analyse/export - Export XLSX (filtres: dateFrom, dateTo, posteIds) */
 router.get("/export", async (req, res) => {
   try {
     const pool = await getPool();
     const anneeExport = parseInt(req.query.annee, 10) || new Date().getFullYear();
+    const { dateFrom, dateTo, posteIds: posteIdsParam } = req.query || {};
+    const posteIds = typeof posteIdsParam === "string"
+      ? (posteIdsParam ? posteIdsParam.split(",").map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id)) : [])
+      : Array.isArray(posteIdsParam) ? posteIdsParam.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id)) : [];
 
-    const [benevoles] = await pool.query(
-      `SELECT DISTINCT u.id, u.nom, u.prenom
-       FROM inscriptions i
-       JOIN users u ON u.id = i.user_id
-       ORDER BY u.nom, u.prenom`
-    );
+    const filter = buildCreneauFilter(dateFrom, dateTo, posteIds.length > 0 ? posteIds : null);
+    let benevoles = [];
+    if (filter.params.length > 0) {
+      const [creneauxRows] = await pool.query(
+        `SELECT id FROM creneaux c WHERE 1=1 ${filter.where}`,
+        filter.params
+      );
+      const creneauIds = creneauxRows.map((r) => r.id);
+      if (creneauIds.length > 0) {
+        const placeholders = creneauIds.map(() => "?").join(",");
+        const [rows] = await pool.query(
+          `SELECT DISTINCT u.id, u.nom, u.prenom, u.email
+           FROM inscriptions i
+           JOIN users u ON u.id = i.user_id
+           WHERE i.creneau_id IN (${placeholders})
+           ORDER BY u.nom, u.prenom`,
+          creneauIds
+        );
+        benevoles = rows;
+      }
+    } else {
+      const [rows] = await pool.query(
+        `SELECT DISTINCT u.id, u.nom, u.prenom, u.email
+         FROM inscriptions i
+         JOIN users u ON u.id = i.user_id
+         ORDER BY u.nom, u.prenom`
+      );
+      benevoles = rows;
+    }
 
     const [benevolesManuels] = await pool.query(
       "SELECT nom, prenom FROM benevoles_manuels WHERE annee = ? ORDER BY nom, prenom",
@@ -122,23 +156,33 @@ router.get("/export", async (req, res) => {
 
     sheet.getCell(rowNum, 1).value = "Nom";
     sheet.getCell(rowNum, 2).value = "Prénom";
+    sheet.getCell(rowNum, 3).value = "Email";
+    sheet.getCell(rowNum, 4).value = "Source";
     sheet.getCell(rowNum, 1).font = { bold: true };
     sheet.getCell(rowNum, 2).font = { bold: true };
+    sheet.getCell(rowNum, 3).font = { bold: true };
+    sheet.getCell(rowNum, 4).font = { bold: true };
     rowNum++;
 
     for (const b of benevoles) {
       sheet.getCell(rowNum, 1).value = b.nom;
       sheet.getCell(rowNum, 2).value = b.prenom;
+      sheet.getCell(rowNum, 3).value = b.email || "";
+      sheet.getCell(rowNum, 4).value = "App";
       rowNum++;
     }
     for (const b of benevolesManuels) {
       sheet.getCell(rowNum, 1).value = b.nom;
       sheet.getCell(rowNum, 2).value = b.prenom;
+      sheet.getCell(rowNum, 3).value = "";
+      sheet.getCell(rowNum, 4).value = "Manuel";
       rowNum++;
     }
 
     sheet.getColumn(1).width = 25;
     sheet.getColumn(2).width = 25;
+    sheet.getColumn(3).width = 30;
+    sheet.getColumn(4).width = 12;
 
     const buffer = await workbook.xlsx.writeBuffer();
 
@@ -153,8 +197,11 @@ router.get("/export", async (req, res) => {
 /** GET /api/admin/analyse - Stats KPI + taux remplissage par poste + liste bénévoles */
 router.get("/", async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query || {};
-    const filter = buildDateFilter(dateFrom, dateTo);
+    const { dateFrom, dateTo, posteIds: posteIdsParam } = req.query || {};
+    const posteIds = typeof posteIdsParam === "string"
+      ? (posteIdsParam ? posteIdsParam.split(",").map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id)) : [])
+      : Array.isArray(posteIdsParam) ? posteIdsParam.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id)) : [];
+    const filter = buildCreneauFilter(dateFrom, dateTo, posteIds.length > 0 ? posteIds : null);
 
     const pool = await getPool();
 
@@ -166,10 +213,12 @@ router.get("/", async (req, res) => {
       );
       creneauIdsFiltered = creneauxRows.map((r) => r.id);
       if (creneauIdsFiltered.length === 0) {
+        const [postesAll] = await pool.query("SELECT id, titre FROM postes ORDER BY titre");
         return res.json({
           nbPlacesPrises: 0,
           nbBenevoles: 0,
           tauxRemplissageParPoste: [],
+          postes: postesAll.map((p) => ({ id: p.id, titre: p.titre })),
           benevoles: [],
         });
       }
@@ -196,6 +245,9 @@ router.get("/", async (req, res) => {
        LEFT JOIN (SELECT creneau_id, COUNT(*) as n FROM inscriptions GROUP BY creneau_id) nb ON nb.creneau_id = c.id
        ORDER BY p.titre, c.date_debut`
     );
+
+    const [postesAll] = await pool.query("SELECT id, titre FROM postes ORDER BY titre");
+    const postes = postesAll.map((p) => ({ id: p.id, titre: p.titre }));
 
     const postesAgg = {};
     for (const row of postesRaw) {
@@ -252,6 +304,7 @@ router.get("/", async (req, res) => {
       nbPlacesPrises: Number(stats?.nb_places_prises) || 0,
       nbBenevoles: Number(stats?.nb_benevoles) || 0,
       tauxRemplissageParPoste: tauxParPoste,
+      postes,
       benevoles,
     });
   } catch (err) {

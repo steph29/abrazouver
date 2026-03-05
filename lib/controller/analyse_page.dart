@@ -29,10 +29,12 @@ class _AnalysePageState extends State<AnalysePage> {
   int _nbPlacesPrises = 0;
   int _nbBenevoles = 0;
   List<Map<String, dynamic>> _tauxParPoste = [];
+  List<Map<String, dynamic>> _postes = [];
   List<Map<String, dynamic>> _benevoles = [];
   DateTime? _selectedDay;
   int _heureDebut = 0;
   int _heureFin = 24;
+  Set<int> _selectedPosteIds = {};
   bool _exporting = false;
   String _benevoleSearch = '';
   List<Map<String, dynamic>> _benevolesManuels = [];
@@ -85,6 +87,7 @@ class _AnalysePageState extends State<AnalysePage> {
         widget.user.id,
         dateFrom: dateFrom,
         dateTo: dateTo,
+        posteIds: _selectedPosteIds.isEmpty ? null : _selectedPosteIds.toList(),
       );
       if (!mounted) return;
       setState(() {
@@ -92,6 +95,9 @@ class _AnalysePageState extends State<AnalysePage> {
         _nbBenevoles = (data['nbBenevoles'] as num?)?.toInt() ?? 0;
         _tauxParPoste = List<Map<String, dynamic>>.from(
           (data['tauxRemplissageParPoste'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _postes = List<Map<String, dynamic>>.from(
+          (data['postes'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
         );
         _benevoles = List<Map<String, dynamic>>.from(
           (data['benevoles'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
@@ -153,8 +159,18 @@ class _AnalysePageState extends State<AnalysePage> {
     try {
       final logoBytes = _getLogoBytes();
       final pdf = pw.Document();
-      final appBenevoles = _filteredBenevoles.map((b) => {'nom': b['nom']?.toString() ?? '', 'prenom': b['prenom']?.toString() ?? ''}).toList();
-      final manuels = _benevolesManuels.map((b) => {'nom': b['nom']?.toString() ?? '', 'prenom': b['prenom']?.toString() ?? ''}).toList();
+      final appBenevoles = _filteredBenevoles.map((b) => {
+        'nom': b['nom']?.toString() ?? '',
+        'prenom': b['prenom']?.toString() ?? '',
+        'email': b['email']?.toString() ?? '',
+        'source': 'App',
+      }).toList();
+      final manuels = _benevolesManuels.map((b) => {
+        'nom': b['nom']?.toString() ?? '',
+        'prenom': b['prenom']?.toString() ?? '',
+        'email': '',
+        'source': 'Manuel',
+      }).toList();
       final benevoles = [...appBenevoles, ...manuels]
         ..sort((a, b) => '${a['nom']} ${a['prenom']}'.compareTo('${b['nom']} ${b['prenom']}'));
 
@@ -193,12 +209,16 @@ class _AnalysePageState extends State<AnalysePage> {
                   children: [
                     _cell('Nom', bold: true),
                     _cell('Prénom', bold: true),
+                    _cell('Email', bold: true),
+                    _cell('Source', bold: true),
                   ],
                 ),
                 ...benevoles.map((b) => pw.TableRow(
                       children: [
                         _cell(b['nom'] ?? ''),
                         _cell(b['prenom'] ?? ''),
+                        _cell(b['email'] ?? ''),
+                        _cell(b['source'] ?? ''),
                       ],
                     )),
               ],
@@ -268,10 +288,30 @@ class _AnalysePageState extends State<AnalysePage> {
         ),
       );
 
+  String? get _dateFromForExport {
+    if (_selectedDay == null) return null;
+    final d = _selectedDay!;
+    final dayStr = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return '${dayStr}T${_heureDebut.toString().padLeft(2, '0')}:00:00';
+  }
+
+  String? get _dateToForExport {
+    if (_selectedDay == null) return null;
+    final d = _selectedDay!;
+    final dayStr = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return _heureFin >= 24 ? '${dayStr}T23:59:59' : '${dayStr}T${_heureFin.toString().padLeft(2, '0')}:00:00';
+  }
+
   Future<void> _downloadExportXlsx() async {
     setState(() => _exporting = true);
     try {
-      final bytes = await AnalyseService.downloadExport(widget.user.id, annee: _anneeExport);
+      final bytes = await AnalyseService.downloadExport(
+        widget.user.id,
+        annee: _anneeExport,
+        dateFrom: _dateFromForExport,
+        dateTo: _dateToForExport,
+        posteIds: _selectedPosteIds.isEmpty ? null : _selectedPosteIds.toList(),
+      );
       if (!mounted) return;
       if (bytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -347,6 +387,21 @@ class _AnalysePageState extends State<AnalysePage> {
     });
     _loadData();
     _loadBenevolesManuels();
+  }
+
+  void _showPosteFilterPicker(ThemeData theme, Color secondaryColor) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => _PosteFilterSheet(
+        postes: _postes,
+        initialSelected: _selectedPosteIds,
+        secondaryColor: secondaryColor,
+        onApply: (selected) {
+          setState(() => _selectedPosteIds = selected);
+          _loadData();
+        },
+      ),
+    );
   }
 
   String _formatDateShort(DateTime d) {
@@ -467,6 +522,39 @@ class _AnalysePageState extends State<AnalysePage> {
                           onChangeEnd: (_) => _loadData(),
                         ),
                       ],
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(Icons.work_outline, color: secondaryColor, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _selectedPosteIds.isEmpty ? 'Tous les postes' : '${_selectedPosteIds.length} poste(s) sélectionné(s)',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          FilledButton.icon(
+                            onPressed: () => _showPosteFilterPicker(theme, secondaryColor),
+                            icon: const Icon(Icons.filter_list, size: 18),
+                            label: Text(_selectedPosteIds.isEmpty ? 'Filtrer par postes' : 'Modifier'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: secondaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                          if (_selectedPosteIds.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () {
+                                setState(() => _selectedPosteIds = {});
+                                _loadData();
+                              },
+                              icon: const Icon(Icons.clear),
+                              tooltip: 'Tous les postes',
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -543,17 +631,40 @@ class _AnalysePageState extends State<AnalysePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Bénévoles inscrits', style: theme.textTheme.titleMedium),
-                  FilledButton.icon(
-                    onPressed: _exporting ? null : _showExportChoice,
-                    icon: _exporting
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.download),
-                    label: Text(_exporting ? 'Téléchargement...' : 'Télécharger'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: secondaryColor,
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Bénévoles inscrits', style: theme.textTheme.titleMedium),
+                        if (_selectedDay == null && _selectedPosteIds.isEmpty)
+                          Text(
+                            'Tous les bénévoles (app + inscrits à la main)',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                      ],
                     ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _showPosteFilterPicker(theme, secondaryColor),
+                        icon: const Icon(Icons.filter_list, size: 18),
+                        label: Text(_selectedPosteIds.isEmpty ? 'Filtrer par postes' : 'Postes (${_selectedPosteIds.length})'),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: _exporting ? null : _showExportChoice,
+                        icon: _exporting
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.download),
+                        label: Text(_exporting ? 'Téléchargement...' : 'Télécharger'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: secondaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -795,5 +906,93 @@ class _AnalysePageState extends State<AnalysePage> {
     if (f == null) return d.toString();
     return '${d.day}/${d.month} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} - '
         '${f.hour.toString().padLeft(2, '0')}:${f.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _PosteFilterSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> postes;
+  final Set<int> initialSelected;
+  final Color secondaryColor;
+  final void Function(Set<int>) onApply;
+
+  const _PosteFilterSheet({
+    required this.postes,
+    required this.initialSelected,
+    required this.secondaryColor,
+    required this.onApply,
+  });
+
+  @override
+  State<_PosteFilterSheet> createState() => _PosteFilterSheetState();
+}
+
+class _PosteFilterSheetState extends State<_PosteFilterSheet> {
+  late Set<int> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<int>.from(widget.initialSelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Filtrer par postes', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Sélectionnez les postes à afficher. Aucune sélection = tous les postes.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.postes.map((p) {
+                final id = (p['id'] as num?)?.toInt() ?? 0;
+                final titre = p['titre']?.toString() ?? 'Poste $id';
+                final isSelected = _selected.contains(id);
+                return FilterChip(
+                  selected: isSelected,
+                  label: Text(titre),
+                  onSelected: (v) {
+                    setState(() {
+                      if (v) _selected.add(id);
+                      else _selected.remove(id);
+                    });
+                  },
+                  selectedColor: widget.secondaryColor.withOpacity(0.5),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Annuler'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    widget.onApply(Set.from(_selected));
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Appliquer'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

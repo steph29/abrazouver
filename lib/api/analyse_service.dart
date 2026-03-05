@@ -10,10 +10,14 @@ class AnalyseService {
     int adminUserId, {
     String? dateFrom,
     String? dateTo,
+    List<int>? posteIds,
   }) async {
     final query = <String>[];
     if (dateFrom != null && dateFrom.isNotEmpty) query.add('dateFrom=$dateFrom');
     if (dateTo != null && dateTo.isNotEmpty) query.add('dateTo=$dateTo');
+    if (posteIds != null && posteIds.isNotEmpty) {
+      query.add('posteIds=${posteIds.join(',')}');
+    }
     final qs = query.isEmpty ? '' : '?${query.join('&')}';
     return ApiService.get(
       '/admin/analyse$qs',
@@ -22,9 +26,23 @@ class AnalyseService {
   }
 
   /// Télécharge le fichier XLSX des bénévoles inscrits (+ bénévoles manuels pour l'année).
-  static Future<Uint8List?> downloadExport(int adminUserId, {int? annee}) async {
-    final qs = annee != null ? '?annee=$annee' : '';
-    final url = Uri.parse('${ApiService.baseUrl}/admin/analyse/export$qs');
+  static Future<Uint8List?> downloadExport(
+    int adminUserId, {
+    int? annee,
+    String? dateFrom,
+    String? dateTo,
+    List<int>? posteIds,
+  }) async {
+    final params = <String, String>{};
+    if (annee != null) params['annee'] = annee.toString();
+    if (dateFrom != null && dateFrom.isNotEmpty) params['dateFrom'] = dateFrom;
+    if (dateTo != null && dateTo.isNotEmpty) params['dateTo'] = dateTo;
+    if (posteIds != null && posteIds.isNotEmpty) {
+      params['posteIds'] = posteIds.join(',');
+    }
+    final url = params.isEmpty
+        ? Uri.parse('${ApiService.baseUrl}/admin/analyse/export')
+        : Uri.parse('${ApiService.baseUrl}/admin/analyse/export').replace(queryParameters: params);
     final resp = await http.get(
       url,
       headers: {'X-User-Id': adminUserId.toString()},

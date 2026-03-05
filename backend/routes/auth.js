@@ -203,10 +203,22 @@ router.post('/register', async (req, res) => {
   }
 });
 
+/** Construit l'URL de l'app à partir du Host API (api.xxx.domaine → app.xxx.domaine) */
+function getAppBaseUrlFromHost(req) {
+  const host = req.get('host') || req.get('x-forwarded-host') || '';
+  const domain = (process.env.PROVISION_DOMAIN || 'steph-verardo.fr').trim();
+  if (!host) return null;
+  const parts = host.toLowerCase().replace(/:\d+$/, '').split('.');
+  if (parts[0] === 'api' && parts[1]) {
+    return `https://app.${parts[1]}.${parts.slice(2).join('.') || domain}`;
+  }
+  return null;
+}
+
 /** POST /auth/forgot-password - Demande de réinitialisation (envoi email avec lien) */
 router.post('/forgot-password', async (req, res) => {
   try {
-    const { email, appBaseUrl } = req.body;
+    const { email, appBaseUrl } = req.body || {};
     if (!email || !email.trim()) {
       return res.status(400).json({ message: 'Email requis' });
     }
@@ -225,23 +237,32 @@ router.post('/forgot-password', async (req, res) => {
       [token, expiresAt, rows[0].id]
     );
 
-    const baseUrl = (appBaseUrl || req.get('origin') || '').replace(/\/$/, '');
+    const baseUrl = (appBaseUrl || req.get('origin') || getAppBaseUrlFromHost(req) || '').toString().trim().replace(/\/$/, '');
     const resetLink = baseUrl ? `${baseUrl}/reset-password?token=${token}` : null;
 
-    if (resetLink) {
-      const sent = await sendMail({
-        to: email.trim().toLowerCase(),
-        subject: 'Abrazouver - Réinitialisation du mot de passe',
-        text: `Pour réinitialiser votre mot de passe, cliquez sur ce lien (valide 1 heure) :\n\n${resetLink}\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez cet email.`,
-        html: `<p>Pour réinitialiser votre mot de passe, <a href="${resetLink}">cliquez ici</a> (lien valide 1 heure).</p><p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.</p>`,
+    if (!resetLink) {
+      console.error('Forgot password: impossible de construire le lien (appBaseUrl manquant)');
+      return res.status(503).json({
+        message: 'Configuration manquante pour le lien de réinitialisation. Contactez l\'administrateur.',
       });
-      if (!sent) {
-        return res.status(503).json({
-          message: 'L\'envoi d\'email n\'est pas configuré. Contactez l\'administrateur pour réinitialiser votre mot de passe.',
-        });
-      }
     }
 
+    const to = email.trim().toLowerCase();
+    const sent = await sendMail({
+      to,
+      subject: 'Abrazouver - Réinitialisation du mot de passe',
+      text: `Pour réinitialiser votre mot de passe, cliquez sur ce lien (valide 1 heure) :\n\n${resetLink}\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez cet email.`,
+      html: `<p>Pour réinitialiser votre mot de passe, <a href="${resetLink}">cliquez ici</a> (lien valide 1 heure).</p><p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.</p>`,
+    });
+
+    if (!sent) {
+      console.error('Forgot password: échec envoi email vers', to);
+      return res.status(503).json({
+        message: 'L\'envoi d\'email a échoué. Réessayez ou contactez l\'administrateur.',
+      });
+    }
+
+    console.log('Forgot password: email envoyé vers', to);
     res.json({ message: 'Si cet email existe, un lien de réinitialisation vous a été envoyé.' });
   } catch (err) {
     console.error('Forgot password error:', err.message);
@@ -252,7 +273,8 @@ router.post('/forgot-password', async (req, res) => {
 /** POST /auth/reset-password - Réinitialisation avec token du lien email */
 router.post('/reset-password', async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const token = (req.body?.token || '').toString().trim();
+    const newPassword = (req.body?.newPassword || '').toString();
     if (!token || !newPassword) {
       return res.status(400).json({ message: 'Token et nouveau mot de passe requis' });
     }
@@ -261,11 +283,18 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const pool = await getPool();
+    const now = new Date();
     const [rows] = await pool.query(
-      'SELECT id FROM users WHERE password_reset_token = ? AND password_reset_expires_at > NOW()',
-      [token]
+      'SELECT id FROM users WHERE password_reset_token = ? AND password_reset_expires_at > ?',
+      [token, now]
     );
     if (rows.length === 0) {
+      const [byToken] = await pool.query('SELECT id, password_reset_expires_at FROM users WHERE password_reset_token = ?', [token]);
+      if (byToken.length > 0) {
+        console.error('Reset password: token expiré pour user', byToken[0].id, 'expires_at=', byToken[0].password_reset_expires_at);
+      } else {
+        console.error('Reset password: token non trouvé, len=', token.length);
+      }
       return res.status(400).json({ message: 'Lien invalide ou expiré. Demandez une nouvelle réinitialisation.' });
     }
 

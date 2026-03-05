@@ -32,14 +32,17 @@ function getTransporter() {
       newline: "unix",
     });
   } else {
+    const port = parseInt(process.env.SMTP_PORT || "587", 10);
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587", 10),
-      secure: process.env.SMTP_SECURE === "true",
+      port,
+      secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1",
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      connectionTimeout: 30000,
+      greetingTimeout: 15000,
     });
   }
   return transporter;

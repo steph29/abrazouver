@@ -9,7 +9,8 @@
     "init-db": "node scripts/init-db.js",
     "migrate": "node scripts/init-db.js",
     "create-inscriptions": "node scripts/create-inscriptions-only.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test-email": "node scripts/test-email.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.6.0",

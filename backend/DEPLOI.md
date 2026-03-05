@@ -58,6 +58,14 @@ Pour ajouter des tables : éditez `backend/scripts/schema.sql`, déployez, c’e
 
 ---
 
+## Email (Mot de passe perdu)
+
+Pour activer l’envoi d’emails (mot de passe perdu, page Contact) avec **Sendmail** sur le VPS, voir `deploy/EMAIL_SENDMAIL.md`.
+
+Résumé : `EMAIL_SENDMAIL=true` et `EMAIL_FROM=contact@steph-verardo.fr` dans `.env`, puis `sudo apt install sendmail` sur le VPS. Tester avec `npm run test-email votre@email.com`.
+
+---
+
 ## Dépannage
 
 | Problème | Solution |
