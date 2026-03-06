@@ -95,8 +95,8 @@ router.post("/", requireAuth, async (req, res) => {
         to: destEmail,
         replyTo: em,
         subject: `[Abrazouver Contact] ${subj}`,
-        text: `Message envoyé depuis la page Contact.\n\nDe : ${em}\n\nObjet : ${subj}\n\n---\n\n${b}`,
-        html: `<p>Message envoyé depuis la page Contact.</p><p><strong>De :</strong> ${em}</p><p><strong>Objet :</strong> ${subj}</p><hr><pre style="white-space:pre-wrap;font-family:inherit">${b.replace(/</g, "&lt;")}</pre>`,
+        text: `Message envoyé depuis la page Contact.\n\nEnvoyé par : ${em}\n\nObjet : ${subj}\n\n---\n\n${b}`,
+        html: `<p>Message envoyé depuis la page Contact.</p><p><strong>Envoyé par :</strong> ${em}</p><p><strong>Objet :</strong> ${subj}</p><hr><pre style="white-space:pre-wrap;font-family:inherit">${b.replace(/</g, "&lt;")}</pre>`,
         attachments,
       });
       if (sent) {
