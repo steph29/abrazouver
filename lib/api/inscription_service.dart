@@ -9,20 +9,43 @@ class InscriptionService {
     );
   }
 
-  static Future<Map<String, dynamic>> inscrire(
-    int userId,
-    int creneauId,
-  ) async {
-    return ApiService.post(
-      '/benevoles/inscriptions',
-      {'creneauId': creneauId},
+  /// Inscriptions groupées par membre du foyer
+  static Future<Map<String, dynamic>> getMesInscriptionsFamily(int userId) async {
+    return ApiService.get(
+      '/benevoles/inscriptions/me/family',
       extraHeaders: {'X-User-Id': userId.toString()},
     );
   }
 
-  static Future<void> desinscrire(int userId, int creneauId) async {
+  /// Inscription à un créneau ; [targetUserIds] pour inscrire un ou plusieurs membres (titulaire).
+  static Future<Map<String, dynamic>> inscrire(
+    int userId,
+    int creneauId, {
+    List<int>? targetUserIds,
+  }) async {
+    final body = <String, dynamic>{'creneauId': creneauId};
+    if (targetUserIds != null && targetUserIds.isNotEmpty) {
+      body['targetUserIds'] = targetUserIds;
+    }
+    return ApiService.post(
+      '/benevoles/inscriptions',
+      body,
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
+
+  /// Désinscription ; [targetUserId] pour annuler pour un membre (responsable).
+  static Future<void> desinscrire(
+    int userId,
+    int creneauId, {
+    int? targetUserId,
+  }) async {
+    var path = '/benevoles/inscriptions/$creneauId';
+    if (targetUserId != null) {
+      path += '?targetUserId=$targetUserId';
+    }
     await ApiService.delete(
-      '/benevoles/inscriptions/$creneauId',
+      path,
       extraHeaders: {'X-User-Id': userId.toString()},
     );
   }

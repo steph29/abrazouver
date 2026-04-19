@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/auth_service.dart';
+import '../model/family_member.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
 
@@ -35,6 +36,14 @@ class _ComptePageState extends State<ComptePage> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
+  List<FamilyMember> _famille = [];
+  bool _loadingFamille = false;
+  final _famPrenomController = TextEditingController();
+  final _famNomController = TextEditingController();
+  final _famEmailController = TextEditingController();
+  final _famPasswordController = TextEditingController();
+  final _famFormKey = GlobalKey<FormState>();
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +52,17 @@ class _ComptePageState extends State<ComptePage> {
     _emailController = TextEditingController(text: widget.user.email);
     _telephoneController = TextEditingController(text: widget.user.telephone ?? '');
     _twoFactorEnabled = widget.user.twoFactorEnabled;
+    if (widget.user.isFamilyHead) {
+      _loadFamille();
+    }
   }
 
   @override
   void dispose() {
+    _famPrenomController.dispose();
+    _famNomController.dispose();
+    _famEmailController.dispose();
+    _famPasswordController.dispose();
     _nomController.dispose();
     _prenomController.dispose();
     _emailController.dispose();
@@ -55,6 +71,253 @@ class _ComptePageState extends State<ComptePage> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFamille() async {
+    setState(() => _loadingFamille = true);
+    try {
+      final raw = await AuthService.getFamilyMembers(widget.user.id);
+      if (!mounted) return;
+      setState(() {
+        _famille = raw.map((e) => FamilyMember.fromJson(e)).toList();
+        _loadingFamille = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingFamille = false);
+    }
+  }
+
+  Future<void> _addFamilyMember() async {
+    if (!_famFormKey.currentState!.validate()) return;
+    final email = _famEmailController.text.trim();
+    final pwd = _famPasswordController.text;
+    if (email.isNotEmpty && pwd.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Si un email est renseigné, le mot de passe doit faire au moins 6 caractères.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (email.isEmpty && pwd.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Indiquez un email pour un compte avec mot de passe, ou laissez email et mot de passe vides.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.addFamilyMember(
+        widget.user.id,
+        email: email.isEmpty ? null : email,
+        password: email.isEmpty ? null : pwd,
+        nom: _famNomController.text.trim(),
+        prenom: _famPrenomController.text.trim(),
+      );
+      if (!mounted) return;
+      _famPrenomController.clear();
+      _famNomController.clear();
+      _famEmailController.clear();
+      _famPasswordController.clear();
+      await _loadFamille();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            email.isEmpty
+                ? 'Membre ajouté. Il n’a pas de compte séparé : vous gérez ses inscriptions depuis votre compte.'
+                : 'Membre ajouté. Il peut se connecter avec son email et son mot de passe.',
+          ),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceAll('ApiException (400): ', '').replaceAll('ApiException (409): ', ''),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _removeFamilyMember(FamilyMember m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Retirer ce membre'),
+        content: Text(
+          'Retirer ${m.displayName} du foyer ? Ses inscriptions aux créneaux seront supprimées.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Retirer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.removeFamilyMember(widget.user.id, m.id);
+      if (!mounted) return;
+      await _loadFamille();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Membre retiré'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('ApiException ', '')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildFamilySection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.textSecondary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.family_restroom_rounded, color: AppColors.primaryDark, size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'Foyer / bénévoles',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ajoutez des membres (conjoint, enfant…). Email et mot de passe sont facultatifs : sans eux, seul le titulaire gère les inscriptions (ex. couple sur une seule adresse).',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          if (_loadingFamille)
+            const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+          else
+            ..._famille.where((m) => !m.isHead).map(
+                  (m) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(m.displayName),
+                    subtitle: Text(
+                      m.canLogin && (m.email?.isNotEmpty ?? false)
+                          ? m.email!
+                          : 'Compte géré par le titulaire (pas de connexion séparée)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(Icons.delete_outline, color: Colors.red.shade700),
+                      tooltip: 'Retirer',
+                      onPressed: _isLoading ? null : () => _removeFamilyMember(m),
+                    ),
+                  ),
+                ),
+          const SizedBox(height: 16),
+          Text(
+            'Nouveau membre',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Form(
+            key: _famFormKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _famPrenomController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Prénom',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Prénom requis' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _famNomController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _famEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (facultatif)',
+                    hintText: 'Laisser vide si pas de compte séparé',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v.trim())) {
+                      return 'Email invalide';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _famPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Mot de passe (facultatif, min. 6 caractères si email)',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return null;
+                    if (v.length < 6) return 'Au moins 6 caractères si renseigné';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _isLoading ? null : _addFamilyMember,
+                  icon: const Icon(Icons.person_add_rounded, size: 20),
+                  label: const Text('Ajouter le membre'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -515,6 +778,10 @@ class _ComptePageState extends State<ComptePage> {
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
               ),
+              if (widget.user.isFamilyHead) ...[
+                const SizedBox(height: 32),
+                _buildFamilySection(),
+              ],
               const SizedBox(height: 24),
               _buildPasswordSection(),
               const SizedBox(height: 24),

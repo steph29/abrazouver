@@ -2,20 +2,24 @@
 class InscriptionDetail {
   final int inscriptionId;
   final int creneauId;
+  /// Utilisateur inscrit sur ce créneau (pour annulation / famille).
+  final int userId;
   final PosteResume poste;
   final CreneauResume creneau;
 
   InscriptionDetail({
     required this.inscriptionId,
     required this.creneauId,
+    required this.userId,
     required this.poste,
     required this.creneau,
   });
 
   factory InscriptionDetail.fromJson(Map<String, dynamic> json) {
     return InscriptionDetail(
-      inscriptionId: json['inscriptionId'] as int,
-      creneauId: json['creneauId'] as int,
+      inscriptionId: (json['inscriptionId'] as num).toInt(),
+      creneauId: (json['creneauId'] as num).toInt(),
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
       poste: PosteResume.fromJson(json['poste'] as Map<String, dynamic>),
       creneau: CreneauResume.fromJson(json['creneau'] as Map<String, dynamic>),
     );

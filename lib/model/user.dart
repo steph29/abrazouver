@@ -6,6 +6,8 @@ class User {
   final String? telephone;
   final bool twoFactorEnabled;
   final bool isAdmin;
+  /// ID du responsable famille ; `null` = titulaire du compte (peut gérer la famille).
+  final int? userWith;
 
   User({
     required this.id,
@@ -15,17 +17,22 @@ class User {
     this.telephone,
     this.twoFactorEnabled = false,
     this.isAdmin = false,
+    this.userWith,
   });
+
+  /// Titulaire : peut ajouter / retirer des membres et inscrire toute la famille.
+  bool get isFamilyHead => userWith == null;
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: (json['id'] as num).toInt(),
-      email: json['email'] as String,
+      email: json['email'] as String? ?? '',
       nom: json['nom'] as String,
       prenom: json['prenom'] as String,
       telephone: json['telephone'] as String?,
       twoFactorEnabled: json['twoFactorEnabled'] == true,
       isAdmin: json['isAdmin'] == true,
+      userWith: json['userWith'] == null ? null : (json['userWith'] as num).toInt(),
     );
   }
 
@@ -37,6 +44,7 @@ class User {
         'telephone': telephone,
         'twoFactorEnabled': twoFactorEnabled,
         'isAdmin': isAdmin,
+        'userWith': userWith,
       };
 
   String get displayName => '$prenom $nom';
@@ -49,6 +57,7 @@ class User {
     String? telephone,
     bool? twoFactorEnabled,
     bool? isAdmin,
+    int? userWith,
   }) {
     return User(
       id: id ?? this.id,
@@ -58,6 +67,7 @@ class User {
       telephone: telephone ?? this.telephone,
       twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
       isAdmin: isAdmin ?? this.isAdmin,
+      userWith: userWith ?? this.userWith,
     );
   }
 }

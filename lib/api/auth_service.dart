@@ -85,4 +85,48 @@ class AuthService {
       extraHeaders: {'X-User-Id': userId.toString()},
     );
   }
+
+  /// Liste des membres du foyer (connecté).
+  static Future<List<Map<String, dynamic>>> getFamilyMembers(int userId) async {
+    final r = await ApiService.get(
+      '/auth/family',
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+    final list = r['members'] as List?;
+    return (list ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Ajoute un bénévole famille (titulaire uniquement).
+  /// [email] et [password] optionnels : sans compte séparé, le membre est géré par le titulaire uniquement.
+  static Future<Map<String, dynamic>> addFamilyMember(
+    int userId, {
+    String? email,
+    String? password,
+    required String nom,
+    required String prenom,
+  }) async {
+    final body = <String, dynamic>{
+      'nom': nom,
+      'prenom': prenom,
+    };
+    final em = email?.trim() ?? '';
+    if (em.isNotEmpty) {
+      body['email'] = em;
+      body['password'] = password ?? '';
+    }
+    return ApiService.post(
+      '/auth/family/member',
+      body,
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
+
+  /// Retire un membre familial (titulaire uniquement).
+  static Future<void> removeFamilyMember(int userId, int memberId) async {
+    await ApiService.delete(
+      '/auth/family/member/$memberId',
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
 }
+

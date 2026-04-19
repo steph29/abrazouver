@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../api/auth_service.dart';
 import '../api/inscription_service.dart';
 import '../api/poste_service.dart';
+import '../model/family_member.dart';
 import '../model/poste.dart';
 import '../model/user.dart';
 import '../theme/app_theme.dart';
@@ -17,6 +19,7 @@ class PlacesLibresPage extends StatefulWidget {
 
 class _PlacesLibresPageState extends State<PlacesLibresPage> {
   List<Poste> _postes = [];
+  List<FamilyMember> _famille = [];
   bool _loading = false;
   String? _error;
 
@@ -24,6 +27,19 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
   void initState() {
     super.initState();
     _loadPostes();
+    _loadFamille();
+  }
+
+  Future<void> _loadFamille() async {
+    try {
+      final raw = await AuthService.getFamilyMembers(widget.user.id);
+      if (!mounted) return;
+      setState(() {
+        _famille = raw.map((e) => FamilyMember.fromJson(e)).toList();
+      });
+    } catch (_) {
+      if (mounted) setState(() => _famille = []);
+    }
   }
 
   Future<void> _loadPostes() async {
@@ -82,8 +98,80 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
 
   Future<void> _inscrire(Creneau c, Poste p) async {
     if (c.complet || c.id == null) return;
+
+    List<int> targetUserIds = [widget.user.id];
+
+    if (_famille.length > 1) {
+      final selected = <int, bool>{
+        for (final m in _famille) m.id: true,
+      };
+      final validated = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx2, setLocal) {
+              return AlertDialog(
+                title: const Text('Inscrire des membres'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _famille.map((m) {
+                      return CheckboxListTile(
+                        value: selected[m.id] ?? false,
+                        onChanged: (v) {
+                          setLocal(() => selected[m.id] = v ?? false);
+                        },
+                        title: Text(
+                          m.displayName.isEmpty ? (m.email ?? 'Membre') : m.displayName,
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                        subtitle: m.isHead
+                            ? const Text('Responsable', style: TextStyle(fontSize: 12))
+                            : Text(
+                                m.canLogin && (m.email?.isNotEmpty ?? false)
+                                    ? m.email!
+                                    : 'Compte géré par le titulaire',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                        activeColor: Theme.of(context).colorScheme.primaryContainer,
+                      );
+                    }).toList(),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Annuler'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Valider'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (validated != true || !mounted) return;
+      targetUserIds = selected.entries.where((e) => e.value).map((e) => e.key).toList();
+      if (targetUserIds.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sélectionnez au moins un membre.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
     try {
-      await InscriptionService.inscrire(widget.user.id, c.id!);
+      await InscriptionService.inscrire(
+        widget.user.id,
+        c.id!,
+        targetUserIds: targetUserIds,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -217,14 +305,12 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
     );
   }
 
-  /// Label court pour les onglets (ex: "Lun 27 janv")
   String _formatDateShort(DateTime d) {
     const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
     const mois = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
     return '${jours[d.weekday - 1]} ${d.day} ${mois[d.month - 1]}';
   }
 
-  /// Carte d'un créneau (affichée dans le déroulant du poste)
   Widget _buildCreneauCard(Poste poste, Creneau creneau) {
     final canClick = !creneau.complet && creneau.id != null;
 
@@ -282,7 +368,7 @@ class _PlacesLibresPageState extends State<PlacesLibresPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: Size.zero,
                     ),
-                    child: const Text('M\'inscrire'),
+                    child: Text(_famille.length > 1 ? 'Inscrire…' : 'M\'inscrire'),
                   ),
                 ],
               ],

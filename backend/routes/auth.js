@@ -17,7 +17,7 @@ router.post('/login', async (req, res) => {
 
     const pool = await getPool();
     const [rows] = await pool.query(
-      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, password_hash FROM users WHERE email = ?',
+      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, user_with, password_hash FROM users WHERE email = ?',
       [email.trim().toLowerCase()]
     );
 
@@ -26,6 +26,12 @@ router.post('/login', async (req, res) => {
     }
 
     const user = rows[0];
+    if (!user.password_hash) {
+      return res.status(401).json({
+        message:
+          'Ce compte ne permet pas la connexion par mot de passe. Utilisez le compte du responsable du foyer.',
+      });
+    }
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
@@ -51,6 +57,7 @@ router.post('/login', async (req, res) => {
       telephone: user.telephone || null,
       twoFactorEnabled: !!user.two_factor_enabled,
       isAdmin: !!user.is_admin,
+      userWith: user.user_with != null ? user.user_with : null,
     });
   } catch (err) {
     console.error('Login error:', err.message);
@@ -76,7 +83,7 @@ router.get('/profile/:id', async (req, res) => {
   try {
     const pool = await getPool();
     const [rows] = await pool.query(
-      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin FROM users WHERE id = ?',
+      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, user_with FROM users WHERE id = ?',
       [req.params.id]
     );
     if (rows.length === 0) {
@@ -91,6 +98,7 @@ router.get('/profile/:id', async (req, res) => {
       telephone: u.telephone || null,
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
+      userWith: u.user_with != null ? u.user_with : null,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -145,7 +153,7 @@ router.put('/profile/:id', async (req, res) => {
     );
 
     const [rows] = await pool.query(
-      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin FROM users WHERE id = ?',
+      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, user_with FROM users WHERE id = ?',
       [userId]
     );
     const u = rows[0];
@@ -157,6 +165,7 @@ router.put('/profile/:id', async (req, res) => {
       telephone: u.telephone || null,
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
+      userWith: u.user_with != null ? u.user_with : null,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -110,6 +110,17 @@ async function runMigration(options = {}) {
       )
     `);
 
+    await conn.query("ALTER TABLE users ADD COLUMN user_with INT NULL DEFAULT NULL AFTER is_admin").catch(() => {});
+    await conn.query("ALTER TABLE users ADD KEY idx_users_user_with (user_with)").catch(() => {});
+    await conn
+      .query(
+        "ALTER TABLE users ADD CONSTRAINT fk_users_user_with FOREIGN KEY (user_with) REFERENCES users(id) ON DELETE CASCADE"
+      )
+      .catch(() => {});
+
+    await conn.query("ALTER TABLE users MODIFY email VARCHAR(255) NULL").catch(() => {});
+    await conn.query("ALTER TABLE users MODIFY password_hash VARCHAR(255) NULL").catch(() => {});
+
     for (const stmt of statements) {
       if (!stmt) continue;
       try {

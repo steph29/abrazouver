@@ -153,7 +153,7 @@ router.post('/verify', async (req, res) => {
 
     const pool = await getPool();
     const [rows] = await pool.query(
-      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, two_factor_secret FROM users WHERE id = ?',
+      'SELECT id, email, nom, prenom, telephone, two_factor_enabled, is_admin, user_with, two_factor_secret FROM users WHERE id = ?',
       [payload.userId]
     );
     if (rows.length === 0 || !rows[0].two_factor_secret) {
@@ -180,6 +180,7 @@ router.post('/verify', async (req, res) => {
       telephone: u.telephone || null,
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
+      userWith: u.user_with != null ? u.user_with : null,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -7,18 +7,21 @@
 
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NULL UNIQUE,
+  password_hash VARCHAR(255) NULL,
   nom VARCHAR(100) NOT NULL,
   prenom VARCHAR(100) NOT NULL,
   telephone VARCHAR(20) DEFAULT NULL,
   two_factor_secret VARCHAR(64) DEFAULT NULL,
   two_factor_enabled TINYINT(1) DEFAULT 0,
   is_admin TINYINT(1) DEFAULT 0,
+  user_with INT NULL DEFAULT NULL COMMENT 'ID du responsable famille (NULL = titulaire)',
   password_reset_token VARCHAR(64) DEFAULT NULL,
   password_reset_expires_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_users_user_with (user_with),
+  CONSTRAINT fk_users_user_with FOREIGN KEY (user_with) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS items (

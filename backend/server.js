@@ -12,6 +12,7 @@ process.on("unhandledRejection", (reason, promise) => {
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
+const familyRoutes = require("./routes/family");
 const { router: twofaRoutes } = require("./routes/twofa");
 const { postesReadRouter, postesAdminRouter } = require("./routes/postes");
 const { isAdmin } = require("./middleware/isAdmin");
@@ -60,6 +61,7 @@ app.use((req, res, next) => {
 // Auth et 2FA en premier (avant le CRUD générique)
 // Routes explicites pour éviter que le CRUD ne capture /api/auth/register comme /:table/:id
 app.use("/api/auth", authRoutes);
+app.use("/api/auth", familyRoutes);
 app.use("/api/auth/2fa", twofaRoutes);
 
 // Le CRUD matche /api/:table/:id (ex: GET /auth/register) - rediriger auth vers le routeur auth
