@@ -1,5 +1,7 @@
 const express = require("express");
 const { getPool } = require("../config/database");
+const { getCurrentEvenementId } = require("../utils/evenementContext");
+const { canManagePoste } = require("../middleware/posteManagementAuth");
 
 /** Normalise une date pour MySQL : YYYY-MM-DD HH:mm:ss */
 function toMysqlDateTime(str) {
@@ -40,16 +42,24 @@ const postesReadRouter = express.Router();
 postesReadRouter.get("/", async (req, res) => {
   try {
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({ data: [] });
+    }
     const [postes] = await pool.query(
-      "SELECT id, titre, description, created_at, updated_at FROM postes ORDER BY titre"
+      "SELECT id, titre, description, created_at, updated_at FROM postes WHERE evenement_id = ? ORDER BY titre",
+      [evId]
     );
     const [creneaux] = await pool.query(
       `SELECT c.id, c.poste_id, c.date_debut, c.date_fin, c.nb_benevoles_requis,
               COALESCE(COUNT(i.id), 0) as nb_inscrits
        FROM creneaux c
+       INNER JOIN postes p ON p.id = c.poste_id
        LEFT JOIN inscriptions i ON i.creneau_id = c.id
+       WHERE p.evenement_id = ?
        GROUP BY c.id
-       ORDER BY c.poste_id, c.date_debut`
+       ORDER BY c.poste_id, c.date_debut`,
+      [evId]
     );
     const byPoste = creneaux.reduce((acc, c) => {
       const pid = c.poste_id;
@@ -81,9 +91,11 @@ postesReadRouter.get("/", async (req, res) => {
 postesReadRouter.get("/:id", async (req, res) => {
   try {
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) return res.status(404).json({ message: "Poste non trouvé" });
     const [[poste]] = await pool.query(
-      "SELECT id, titre, description, created_at, updated_at FROM postes WHERE id = ?",
-      [req.params.id]
+      "SELECT id, titre, description, created_at, updated_at FROM postes WHERE id = ? AND evenement_id = ?",
+      [req.params.id, evId]
     );
     if (!poste) return res.status(404).json({ message: "Poste non trouvé" });
     const [creneaux] = await pool.query(
@@ -120,11 +132,83 @@ postesReadRouter.get("/:id", async (req, res) => {
   }
 });
 
-/** Routeur admin - POST, PUT, DELETE /api/admin/postes */
+/** Routeur admin - GET, POST, PUT, DELETE /api/admin/postes */
 const postesAdminRouter = express.Router();
+
+/** Liste des postes de l'événement en cours : admin = tout, référent = postes assignés uniquement */
+postesAdminRouter.get("/", async (req, res) => {
+  try {
+    const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({ data: [] });
+    }
+    const access = req.posteAccess;
+    let postes;
+    if (access.isAdmin) {
+      [postes] = await pool.query(
+        "SELECT id, titre, description, created_at, updated_at FROM postes WHERE evenement_id = ? ORDER BY titre",
+        [evId]
+      );
+    } else {
+      const ids = access.referentPosteIds;
+      if (ids.length === 0) {
+        return res.json({ data: [] });
+      }
+      [postes] = await pool.query(
+        `SELECT id, titre, description, created_at, updated_at FROM postes
+         WHERE evenement_id = ? AND id IN (${ids.map(() => "?").join(",")})
+         ORDER BY titre`,
+        [evId, ...ids]
+      );
+    }
+    const posteIds = postes.map((p) => p.id);
+    if (posteIds.length === 0) {
+      return res.json({ data: [] });
+    }
+    const [creneaux] = await pool.query(
+      `SELECT c.id, c.poste_id, c.date_debut, c.date_fin, c.nb_benevoles_requis,
+              COALESCE(COUNT(i.id), 0) as nb_inscrits
+       FROM creneaux c
+       INNER JOIN postes p ON p.id = c.poste_id
+       LEFT JOIN inscriptions i ON i.creneau_id = c.id
+       WHERE p.evenement_id = ? AND p.id IN (${posteIds.map(() => "?").join(",")})
+       GROUP BY c.id
+       ORDER BY c.poste_id, c.date_debut`,
+      [evId, ...posteIds]
+    );
+    const byPoste = creneaux.reduce((acc, c) => {
+      const pid = c.poste_id;
+      const nbRequis = c.nb_benevoles_requis;
+      const nbInscrits = Number(c.nb_inscrits) || 0;
+      const placesRestantes = Math.max(0, nbRequis - nbInscrits);
+      if (!acc[pid]) acc[pid] = [];
+      acc[pid].push({
+        id: c.id,
+        dateDebut: c.date_debut,
+        dateFin: c.date_fin,
+        nbBenevolesRequis: nbRequis,
+        nbInscrits,
+        placesRestantes,
+        complet: placesRestantes <= 0,
+      });
+      return acc;
+    }, {});
+    const result = postes.map((p) => ({
+      ...p,
+      creneaux: byPoste[p.id] || [],
+    }));
+    res.json({ data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 async function createPosteHandler(req, res) {
   try {
+    if (!req.posteAccess.isAdmin) {
+      return res.status(403).json({ message: "Seuls les administrateurs peuvent créer un nouveau poste" });
+    }
     const { titre, description, creneaux } = req.body;
     if (!titre || typeof titre !== "string" || titre.trim().length === 0) {
       return res.status(400).json({ message: "Titre requis" });
@@ -155,9 +239,21 @@ async function createPosteHandler(req, res) {
       });
     }
     const pool = await getPool();
+    let evId = null;
+    if (req.body && req.body.evenementId != null && req.body.evenementId !== "") {
+      const n = parseInt(req.body.evenementId, 10);
+      if (!Number.isNaN(n)) {
+        const [[ex]] = await pool.query("SELECT id FROM evenements WHERE id = ?", [n]);
+        if (ex) evId = n;
+      }
+    }
+    if (evId == null) evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(400).json({ message: "Aucun événement cible" });
+    }
     const [r] = await pool.query(
-      "INSERT INTO postes (titre, description) VALUES (?, ?)",
-      [titre.trim(), description?.trim() || null]
+      "INSERT INTO postes (titre, description, evenement_id) VALUES (?, ?, ?)",
+      [titre.trim(), description?.trim() || null, evId]
     );
     const posteId = r.insertId;
     for (const c of creneauxArr) {
@@ -199,6 +295,15 @@ postesAdminRouter.put("/:id", async (req, res) => {
   try {
     const posteId = parseInt(req.params.id, 10);
     if (isNaN(posteId)) return res.status(400).json({ message: "ID invalide" });
+    const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    const [[existing]] = await pool.query("SELECT id, evenement_id FROM postes WHERE id = ?", [posteId]);
+    if (!existing || Number(existing.evenement_id) !== Number(evId)) {
+      return res.status(404).json({ message: "Poste non trouvé" });
+    }
+    if (!canManagePoste(req.posteAccess, posteId)) {
+      return res.status(403).json({ message: "Vous n'êtes pas autorisé à modifier ce poste" });
+    }
     const { titre, description, creneaux } = req.body;
     if (!titre || typeof titre !== "string" || titre.trim().length === 0) {
       return res.status(400).json({ message: "Titre requis" });
@@ -228,7 +333,6 @@ postesAdminRouter.put("/:id", async (req, res) => {
         message: "Les créneaux ne doivent pas se chevaucher",
       });
     }
-    const pool = await getPool();
     const [r] = await pool.query(
       "UPDATE postes SET titre = ?, description = ? WHERE id = ?",
       [titre.trim(), description?.trim() || null, posteId]
@@ -272,10 +376,18 @@ postesAdminRouter.put("/:id", async (req, res) => {
 
 postesAdminRouter.delete("/:id", async (req, res) => {
   try {
+    const posteId = parseInt(req.params.id, 10);
+    if (Number.isNaN(posteId)) return res.status(400).json({ message: "ID invalide" });
     const pool = await getPool();
-    const [r] = await pool.query("DELETE FROM postes WHERE id = ?", [
-      req.params.id,
-    ]);
+    const evId = await getCurrentEvenementId(pool);
+    const [[existing]] = await pool.query("SELECT id, evenement_id FROM postes WHERE id = ?", [posteId]);
+    if (!existing || Number(existing.evenement_id) !== Number(evId)) {
+      return res.status(404).json({ message: "Poste non trouvé" });
+    }
+    if (!req.posteAccess.isAdmin) {
+      return res.status(403).json({ message: "Seuls les administrateurs peuvent supprimer un poste" });
+    }
+    const [r] = await pool.query("DELETE FROM postes WHERE id = ?", [posteId]);
     if (r.affectedRows === 0) {
       return res.status(404).json({ message: "Poste non trouvé" });
     }

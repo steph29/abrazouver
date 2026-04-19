@@ -9,15 +9,34 @@ class PosteService {
     return ApiService.get('/postes/$id');
   }
 
-  static Future<Map<String, dynamic>> createPoste(Map<String, dynamic> data) async {
-    return ApiService.post('/admin/postes', data);
+  /// Liste pour la gestion (admin : tous les postes de l’événement ; référent : postes assignés).
+  static Future<Map<String, dynamic>> getPostesForManagement(int userId) async {
+    return ApiService.get(
+      '/admin/postes',
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
   }
 
-  static Future<Map<String, dynamic>> updatePoste(int id, Map<String, dynamic> data) async {
-    return ApiService.put('/admin/postes/$id', data);
+  static Future<Map<String, dynamic>> createPoste(int userId, Map<String, dynamic> data) async {
+    return ApiService.post(
+      '/admin/postes',
+      data,
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
   }
 
-  static Future<void> deletePoste(int id) async {
-    await ApiService.delete('/admin/postes/$id');
+  static Future<Map<String, dynamic>> updatePoste(int userId, int id, Map<String, dynamic> data) async {
+    return ApiService.put(
+      '/admin/postes/$id',
+      data,
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
+  }
+
+  static Future<void> deletePoste(int userId, int id) async {
+    await ApiService.delete(
+      '/admin/postes/$id',
+      extraHeaders: {'X-User-Id': userId.toString()},
+    );
   }
 }

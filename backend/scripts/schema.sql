@@ -117,3 +117,33 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   KEY idx_contact_user (user_id),
   KEY idx_contact_created (created_at)
 );
+
+-- Événements (plusieurs par an) — liaison postes et préférences appliquée par run-migration.js
+CREATE TABLE IF NOT EXISTS evenements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nom VARCHAR(255) NOT NULL,
+  description TEXT,
+  date_debut DATETIME NOT NULL,
+  date_fin DATETIME NOT NULL,
+  annee INT NOT NULL,
+  notes_json MEDIUMTEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS evenement_preferences (
+  evenement_id INT NOT NULL,
+  pref_key VARCHAR(100) NOT NULL,
+  pref_value MEDIUMTEXT,
+  PRIMARY KEY (evenement_id, pref_key),
+  CONSTRAINT fk_evenement_preferences_evenement FOREIGN KEY (evenement_id) REFERENCES evenements(id) ON DELETE CASCADE
+);
+
+-- Référents : bénévoles autorisés à gérer certains postes (attribution par admin)
+CREATE TABLE IF NOT EXISTS referent_postes (
+  user_id INT NOT NULL,
+  poste_id INT NOT NULL,
+  PRIMARY KEY (user_id, poste_id),
+  CONSTRAINT fk_referent_postes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_referent_postes_poste FOREIGN KEY (poste_id) REFERENCES postes(id) ON DELETE CASCADE
+);

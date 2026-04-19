@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getPool } = require("../config/database");
+const { getCurrentEvenementId } = require("../utils/evenementContext");
 
 const DEFAULTS = {
   primaryColor: "#4CAF50",
@@ -40,11 +41,26 @@ function normalizeHex(s) {
   return m ? `#${m[1]}` : null;
 }
 
-/** GET /api/preferences - Public, pour le thème de l'app */
+async function loadPreferenceRows(pool) {
+  const evId = await getCurrentEvenementId(pool);
+  if (evId) {
+    const [rowsEv] = await pool.query(
+      "SELECT pref_key, pref_value FROM evenement_preferences WHERE evenement_id = ?",
+      [evId]
+    );
+    if (rowsEv.length > 0) return rowsEv;
+  }
+  const [rows] = await pool.query(
+    "SELECT pref_key, pref_value FROM app_preferences WHERE pref_key != 'currentEvenementId'"
+  );
+  return rows;
+}
+
+/** GET /api/preferences - Public, pour le thème de l'app (préférences de l'événement en cours) */
 router.get("/", async (req, res) => {
   try {
     const pool = await getPool();
-    const [rows] = await pool.query("SELECT pref_key, pref_value FROM app_preferences");
+    const rows = await loadPreferenceRows(pool);
     const prefs = prefsToObject(rows);
     res.json(prefs);
   } catch (err) {
@@ -101,22 +117,30 @@ function isLogoValid(base64) {
   }
 }
 
-/** PUT /api/preferences - Admin only, met à jour les préférences */
+async function upsertEvenementPref(pool, evId, key, value) {
+  await pool.query(
+    "INSERT INTO evenement_preferences (evenement_id, pref_key, pref_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+    [evId, key, value]
+  );
+}
+
+/** PUT /api/preferences - Admin only, met à jour les préférences de l'événement en cours */
 router.put("/", requireAdmin, async (req, res) => {
   try {
     const { primaryColor, secondaryColor, logo, contactEmail, accueilTitre, accueilDescription } = req.body || {};
     let hasUpdate = false;
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(400).json({ message: "Aucun événement actif — créez un événement d'abord" });
+    }
 
     if (primaryColor !== undefined) {
       const hex = normalizeHex(primaryColor);
       if (!hex || !isValidHex(primaryColor)) {
         return res.status(400).json({ message: "primaryColor invalide (format: #RRGGBB)" });
       }
-      await pool.query(
-        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('primaryColor', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-        [hex]
-      );
+      await upsertEvenementPref(pool, evId, "primaryColor", hex);
       hasUpdate = true;
     }
     if (secondaryColor !== undefined) {
@@ -124,15 +148,12 @@ router.put("/", requireAdmin, async (req, res) => {
       if (!hex || !isValidHex(secondaryColor)) {
         return res.status(400).json({ message: "secondaryColor invalide (format: #RRGGBB)" });
       }
-      await pool.query(
-        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('secondaryColor', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-        [hex]
-      );
+      await upsertEvenementPref(pool, evId, "secondaryColor", hex);
       hasUpdate = true;
     }
     if (logo !== undefined) {
       if (logo === null || logo === "") {
-        await pool.query("DELETE FROM app_preferences WHERE pref_key = 'logo'");
+        await pool.query("DELETE FROM evenement_preferences WHERE evenement_id = ? AND pref_key = 'logo'", [evId]);
       } else {
         const base64 = parseLogoDataUri(logo);
         if (!base64 || !isLogoValid(base64)) {
@@ -141,35 +162,23 @@ router.put("/", requireAdmin, async (req, res) => {
           });
         }
         const toStore = logo.includes(";base64,") ? logo : `data:image/png;base64,${base64}`;
-        await pool.query(
-          "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('logo', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-          [toStore]
-        );
+        await upsertEvenementPref(pool, evId, "logo", toStore);
       }
       hasUpdate = true;
     }
     if (contactEmail !== undefined) {
       const val = typeof contactEmail === "string" ? contactEmail.trim() : "";
-      await pool.query(
-        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('contactEmail', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-        [val]
-      );
+      await upsertEvenementPref(pool, evId, "contactEmail", val);
       hasUpdate = true;
     }
     if (accueilTitre !== undefined) {
       const val = typeof accueilTitre === "string" ? accueilTitre.trim() : "";
-      await pool.query(
-        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('accueilTitre', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-        [val]
-      );
+      await upsertEvenementPref(pool, evId, "accueilTitre", val);
       hasUpdate = true;
     }
     if (accueilDescription !== undefined) {
       const val = typeof accueilDescription === "string" ? String(accueilDescription) : "";
-      await pool.query(
-        "INSERT INTO app_preferences (pref_key, pref_value) VALUES ('accueilDescription', ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
-        [val]
-      );
+      await upsertEvenementPref(pool, evId, "accueilDescription", val);
       hasUpdate = true;
     }
 
@@ -177,7 +186,7 @@ router.put("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "Aucune préférence à modifier" });
     }
 
-    const [rows] = await pool.query("SELECT pref_key, pref_value FROM app_preferences");
+    const rows = await loadPreferenceRows(pool);
     res.json(prefsToObject(rows));
   } catch (err) {
     res.status(500).json({ message: err.message });

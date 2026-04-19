@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getPool } = require("../config/database");
+const { getCurrentEvenementId } = require("../utils/evenementContext");
 
 function getUserId(req) {
   const id = req.headers["x-user-id"];
@@ -48,6 +49,10 @@ router.get("/me", async (req, res) => {
       return res.status(401).json({ message: "Authentification requise (X-User-Id)" });
     }
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({ data: [] });
+    }
     const [rows] = await pool.query(
       `SELECT i.id as inscription_id, i.creneau_id, i.user_id,
               c.date_debut, c.date_fin, c.nb_benevoles_requis,
@@ -55,9 +60,9 @@ router.get("/me", async (req, res) => {
        FROM inscriptions i
        JOIN creneaux c ON c.id = i.creneau_id
        JOIN postes p ON p.id = c.poste_id
-       WHERE i.user_id = ?
+       WHERE i.user_id = ? AND p.evenement_id = ?
        ORDER BY c.date_debut, p.titre`,
-      [userId]
+      [userId, evId]
     );
     const data = rows.map(mapInscriptionRow);
     res.json({ data });
@@ -74,6 +79,10 @@ router.get("/me/family", async (req, res) => {
       return res.status(401).json({ message: "Authentification requise (X-User-Id)" });
     }
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({ members: [] });
+    }
     const ctx = await getFamilyContext(pool, userId);
     if (!ctx) return res.status(404).json({ message: "Utilisateur introuvable" });
 
@@ -93,9 +102,9 @@ router.get("/me/family", async (req, res) => {
          FROM inscriptions i
          JOIN creneaux c ON c.id = i.creneau_id
          JOIN postes p ON p.id = c.poste_id
-         WHERE i.user_id = ?
+         WHERE i.user_id = ? AND p.evenement_id = ?
          ORDER BY c.date_debut, p.titre`,
-        [m.id]
+        [m.id, evId]
       );
       out.push({
         userId: m.id,
@@ -142,6 +151,10 @@ router.post("/", async (req, res) => {
     }
 
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(400).json({ message: "Aucun événement actif" });
+    }
     const ctx = await getFamilyContext(pool, userId);
     if (!ctx) return res.status(404).json({ message: "Utilisateur introuvable" });
     const [[requester]] = await pool.query("SELECT id, user_with FROM users WHERE id = ?", [userId]);
@@ -168,12 +181,14 @@ router.post("/", async (req, res) => {
     }
 
     const [[creneau]] = await pool.query(
-      `SELECT c.id, c.nb_benevoles_requis,
+      `SELECT c.id, c.nb_benevoles_requis, p.evenement_id,
               (SELECT COUNT(*) FROM inscriptions i WHERE i.creneau_id = c.id) as nb_inscrits
-       FROM creneaux c WHERE c.id = ?`,
+       FROM creneaux c
+       INNER JOIN postes p ON p.id = c.poste_id
+       WHERE c.id = ?`,
       [creneauIdNum]
     );
-    if (!creneau) {
+    if (!creneau || Number(creneau.evenement_id) !== Number(evId)) {
       return res.status(404).json({ message: "Créneau non trouvé" });
     }
 
@@ -228,6 +243,10 @@ router.delete("/:creneauId", async (req, res) => {
     }
 
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(404).json({ message: "Inscription non trouvée" });
+    }
     const ctx = await getFamilyContext(pool, userId);
     if (!ctx) return res.status(404).json({ message: "Utilisateur introuvable" });
 
@@ -243,8 +262,11 @@ router.delete("/:creneauId", async (req, res) => {
     }
 
     const [r] = await pool.query(
-      "DELETE FROM inscriptions WHERE user_id = ? AND creneau_id = ?",
-      [targetUserId, creneauId]
+      `DELETE i FROM inscriptions i
+       INNER JOIN creneaux c ON c.id = i.creneau_id
+       INNER JOIN postes p ON p.id = c.poste_id
+       WHERE i.user_id = ? AND i.creneau_id = ? AND p.evenement_id = ?`,
+      [targetUserId, creneauId, evId]
     );
     if (r.affectedRows === 0) {
       return res.status(404).json({ message: "Inscription non trouvée" });

@@ -5,6 +5,7 @@ const { getPool } = require('../config/database');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require('../config/email');
+const { getReferentPosteIds } = require('../utils/userReferents');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'abrazouver-2fa-secret-change-in-production';
 
@@ -49,6 +50,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const referentPosteIds = await getReferentPosteIds(pool, user.id);
     res.json({
       id: user.id,
       email: user.email,
@@ -58,6 +60,7 @@ router.post('/login', async (req, res) => {
       twoFactorEnabled: !!user.two_factor_enabled,
       isAdmin: !!user.is_admin,
       userWith: user.user_with != null ? user.user_with : null,
+      referentPosteIds,
     });
   } catch (err) {
     console.error('Login error:', err.message);
@@ -90,6 +93,7 @@ router.get('/profile/:id', async (req, res) => {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
     const u = rows[0];
+    const referentPosteIds = await getReferentPosteIds(pool, u.id);
     res.json({
       id: u.id,
       email: u.email,
@@ -99,6 +103,7 @@ router.get('/profile/:id', async (req, res) => {
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
       userWith: u.user_with != null ? u.user_with : null,
+      referentPosteIds,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -157,6 +162,7 @@ router.put('/profile/:id', async (req, res) => {
       [userId]
     );
     const u = rows[0];
+    const referentPosteIds = await getReferentPosteIds(pool, u.id);
     res.json({
       id: u.id,
       email: u.email,
@@ -166,6 +172,7 @@ router.put('/profile/:id', async (req, res) => {
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
       userWith: u.user_with != null ? u.user_with : null,
+      referentPosteIds,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

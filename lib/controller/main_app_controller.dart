@@ -18,6 +18,7 @@ import 'mes_postes_page.dart';
 import 'notifications_page.dart';
 import 'places_libres_page.dart';
 import 'preferences_page.dart';
+import 'evenements_page.dart';
 
 const double _kDrawerWidth = 280;
 const double _kBreakpointTablet = 600;
@@ -46,17 +47,32 @@ class _MainAppControllerState extends State<MainAppController> {
     (title: 'Liens utiles', icon: Icons.link_rounded),
   ];
 
-  final List<({String title, IconData icon})> _adminItems = [
-    (title: 'Admin', icon: Icons.admin_panel_settings_rounded),
+  static const ({String title, IconData icon}) _gestionPosteItem = (
+    title: 'Gestion de poste',
+    icon: Icons.manage_accounts_rounded,
+  );
+
+  final List<({String title, IconData icon})> _adminOnlyItems = [
+    (title: 'Événements', icon: Icons.event_rounded),
     (title: 'Préférences', icon: Icons.palette_rounded),
     (title: 'Analyse', icon: Icons.analytics_rounded),
     (title: 'Notifications', icon: Icons.notifications_rounded),
   ];
 
+  List<({String title, IconData icon})> get _extraNavItems {
+    if (_user.isAdmin) {
+      return [_gestionPosteItem, ..._adminOnlyItems];
+    }
+    if (_user.isReferent) {
+      return [_gestionPosteItem];
+    }
+    return [];
+  }
+
   List<({String title, IconData icon})> get _allItems => [
     ..._mainItems,
     (title: 'Mon compte', icon: Icons.person_rounded),
-    if (_user.isAdmin) ..._adminItems,
+    ..._extraNavItems,
   ];
 
   @override
@@ -142,12 +158,20 @@ class _MainAppControllerState extends State<MainAppController> {
       );
     }
     final adminPages = [
-      const AdminPage(),
+      AdminPage(user: _user),
+      EvenementsPage(user: _user),
       PreferencesPage(user: _user),
       AnalysePage(user: _user),
       NotificationsPage(user: _user, onViewed: _onNotificationsViewed),
     ];
-    return adminPages[index - compteIndex - 1];
+    final extraIdx = index - compteIndex - 1;
+    if (_user.isAdmin) {
+      return adminPages[extraIdx];
+    }
+    if (_user.isReferent) {
+      return AdminPage(user: _user);
+    }
+    return const SizedBox.shrink();
   }
 
   void _navigate(int index, {bool closeDrawer = false}) {
@@ -204,7 +228,7 @@ class _MainAppControllerState extends State<MainAppController> {
         ),
         ...List.generate(_allItems.length, (i) {
           final item = _allItems[i];
-          final           showBadge = item.title == 'Notifications' && _unreadNotificationsCount > 0;
+          final showBadge = item.title == 'Notifications' && _unreadNotificationsCount > 0;
           return ListTile(
             leading: showBadge
                 ? Badge(
@@ -358,18 +382,17 @@ class _MainAppControllerState extends State<MainAppController> {
                   icon: Icon(Icons.person_rounded),
                   label: Text('Mon compte'),
                 ),
-                if (_user.isAdmin)
-                  ..._adminItems.map((e) => NavigationRailDestination(
-                        icon: e.title == 'Notifications' && _unreadNotificationsCount > 0
-                            ? Badge(
-                                backgroundColor: Colors.red,
-                                textColor: Colors.white,
-                                label: Text('$_unreadNotificationsCount', style: const TextStyle(fontSize: 10)),
-                                child: Icon(e.icon),
-                              )
-                            : Icon(e.icon),
-                        label: Text(e.title),
-                      )),
+                ..._extraNavItems.map((e) => NavigationRailDestination(
+                      icon: e.title == 'Notifications' && _unreadNotificationsCount > 0
+                          ? Badge(
+                              backgroundColor: Colors.red,
+                              textColor: Colors.white,
+                              label: Text('$_unreadNotificationsCount', style: const TextStyle(fontSize: 10)),
+                              child: Icon(e.icon),
+                            )
+                          : Icon(e.icon),
+                      label: Text(e.title),
+                    )),
               ],
             ),
           Expanded(

@@ -3,6 +3,7 @@ const router = express.Router();
 const { getPool } = require("../config/database");
 const ExcelJS = require("exceljs");
 const { sendMail } = require("../config/email");
+const { getCurrentEvenementId } = require("../utils/evenementContext");
 
 /** Construit les clauses WHERE pour filtrer par date et postes */
 function buildCreneauFilter(dateFrom, dateTo, posteIds) {
@@ -69,6 +70,10 @@ function formatCreneauForEmail(p) {
 router.get("/rappels/benevoles", async (req, res) => {
   try {
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({ benevoles: [] });
+    }
     const [inscriptionsRows] = await pool.query(
       `SELECT u.id, u.nom, u.prenom, u.email,
               i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre, p.id as poste_id
@@ -76,7 +81,9 @@ router.get("/rappels/benevoles", async (req, res) => {
        JOIN users u ON u.id = i.user_id
        JOIN creneaux c ON c.id = i.creneau_id
        JOIN postes p ON p.id = c.poste_id
-       ORDER BY u.nom, u.prenom, c.date_debut`
+       WHERE p.evenement_id = ?
+       ORDER BY u.nom, u.prenom, c.date_debut`,
+      [evId]
     );
     const benevolesMap = new Map();
     for (const row of inscriptionsRows) {
@@ -128,21 +135,32 @@ router.post("/rappels/send", async (req, res) => {
     }
 
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(400).json({ message: "Aucun événement actif" });
+    }
     let benevoles = [];
     if (sendToAll) {
       const [rows] = await pool.query(
         `SELECT DISTINCT u.id, u.nom, u.prenom, u.email FROM inscriptions i
-         JOIN users u ON u.id = i.user_id WHERE u.email IS NOT NULL AND u.email != ''`
+         JOIN users u ON u.id = i.user_id
+         JOIN creneaux c ON c.id = i.creneau_id
+         JOIN postes p ON p.id = c.poste_id
+         WHERE p.evenement_id = ? AND u.email IS NOT NULL AND u.email != ''`,
+        [evId]
       );
       const ids = rows.map((r) => r.id);
-      const [insc] = await pool.query(
-        `SELECT u.id, i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre
+      const [insc] =
+        ids.length === 0
+          ? [[]]
+          : await pool.query(
+              `SELECT u.id, i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre
          FROM inscriptions i JOIN users u ON u.id = i.user_id
          JOIN creneaux c ON c.id = i.creneau_id JOIN postes p ON p.id = c.poste_id
-         WHERE u.id IN (${ids.map(() => "?").join(",")})
+         WHERE p.evenement_id = ? AND u.id IN (${ids.map(() => "?").join(",")})
          ORDER BY u.id, c.date_debut`,
-        ids
-      );
+              [evId, ...ids]
+            );
       const byUser = new Map();
       for (const r of rows) byUser.set(r.id, { ...r, postes: [] });
       for (const r of insc) {
@@ -167,9 +185,9 @@ router.post("/rappels/send", async (req, res) => {
         `SELECT u.id, i.creneau_id, c.date_debut, c.date_fin, p.titre as poste_titre
          FROM inscriptions i JOIN users u ON u.id = i.user_id
          JOIN creneaux c ON c.id = i.creneau_id JOIN postes p ON p.id = c.poste_id
-         WHERE u.id IN (${ids.map(() => "?").join(",")})
+         WHERE p.evenement_id = ? AND u.id IN (${ids.map(() => "?").join(",")})
          ORDER BY u.id, c.date_debut`,
-        ids
+        [evId, ...ids]
       );
       const byUser = new Map();
       for (const r of rows) byUser.set(r.id, { ...r, postes: [] });
@@ -302,6 +320,7 @@ router.delete("/benevoles-manuels/:id", async (req, res) => {
 router.get("/export", async (req, res) => {
   try {
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
     const anneeExport = parseInt(req.query.annee, 10) || new Date().getFullYear();
     const { dateFrom, dateTo, posteIds: posteIdsParam } = req.query || {};
     const posteIds = typeof posteIdsParam === "string"
@@ -310,10 +329,14 @@ router.get("/export", async (req, res) => {
 
     const filter = buildCreneauFilter(dateFrom, dateTo, posteIds.length > 0 ? posteIds : null);
     let benevoles = [];
-    if (filter.params.length > 0) {
+    if (!evId) {
+      benevoles = [];
+    } else if (filter.params.length > 0) {
       const [creneauxRows] = await pool.query(
-        `SELECT id FROM creneaux c WHERE 1=1 ${filter.where}`,
-        filter.params
+        `SELECT c.id FROM creneaux c
+         INNER JOIN postes p ON p.id = c.poste_id
+         WHERE p.evenement_id = ? ${filter.where}`,
+        [evId, ...filter.params]
       );
       const creneauIds = creneauxRows.map((r) => r.id);
       if (creneauIds.length > 0) {
@@ -333,7 +356,11 @@ router.get("/export", async (req, res) => {
         `SELECT DISTINCT u.id, u.nom, u.prenom, u.email
          FROM inscriptions i
          JOIN users u ON u.id = i.user_id
-         ORDER BY u.nom, u.prenom`
+         JOIN creneaux c ON c.id = i.creneau_id
+         JOIN postes p ON p.id = c.poste_id
+         WHERE p.evenement_id = ?
+         ORDER BY u.nom, u.prenom`,
+        [evId]
       );
       benevoles = rows;
     }
@@ -343,10 +370,21 @@ router.get("/export", async (req, res) => {
       [anneeExport]
     );
 
-    const [[logoRow]] = await pool.query("SELECT pref_value FROM app_preferences WHERE pref_key = 'logo'");
+    let logoRow = null;
+    if (evId) {
+      const [[r]] = await pool.query(
+        "SELECT pref_value FROM evenement_preferences WHERE evenement_id = ? AND pref_key = 'logo'",
+        [evId]
+      );
+      logoRow = r;
+    }
+    if (!logoRow?.pref_value) {
+      const [[fallback]] = await pool.query("SELECT pref_value FROM app_preferences WHERE pref_key = 'logo'");
+      logoRow = fallback || logoRow;
+    }
     let logoBase64 = null;
     let logoExt = "png";
-    if (logoRow?.pref_value) {
+    if (logoRow && logoRow.pref_value) {
       const match = String(logoRow.pref_value).match(/^data:image\/(\w+);base64,(.+)$/);
       if (match) {
         logoExt = match[1] === "jpeg" || match[1] === "jpg" ? "jpeg" : "png";
@@ -421,16 +459,30 @@ router.get("/", async (req, res) => {
     const filter = buildCreneauFilter(dateFrom, dateTo, posteIds.length > 0 ? posteIds : null);
 
     const pool = await getPool();
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.json({
+        nbPlacesPrises: 0,
+        nbBenevoles: 0,
+        tauxRemplissageParPoste: [],
+        postes: [],
+        benevoles: [],
+      });
+    }
 
     let creneauIdsFiltered = null;
     if (filter.params.length > 0) {
       const [creneauxRows] = await pool.query(
-        `SELECT id FROM creneaux c WHERE 1=1 ${filter.where}`,
-        filter.params
+        `SELECT c.id FROM creneaux c
+         INNER JOIN postes p ON p.id = c.poste_id
+         WHERE p.evenement_id = ? ${filter.where}`,
+        [evId, ...filter.params]
       );
       creneauIdsFiltered = creneauxRows.map((r) => r.id);
       if (creneauIdsFiltered.length === 0) {
-        const [postesAll] = await pool.query("SELECT id, titre FROM postes ORDER BY titre");
+        const [postesAll] = await pool.query("SELECT id, titre FROM postes WHERE evenement_id = ? ORDER BY titre", [
+          evId,
+        ]);
         return res.json({
           nbPlacesPrises: 0,
           nbBenevoles: 0,
@@ -450,8 +502,10 @@ router.get("/", async (req, res) => {
     const [[stats]] = await pool.query(
       `SELECT COUNT(i.id) as nb_places_prises, COUNT(DISTINCT i.user_id) as nb_benevoles
        FROM inscriptions i
-       WHERE 1=1 ${creneauFilterSql}`,
-      creneauFilterParams
+       INNER JOIN creneaux c ON c.id = i.creneau_id
+       INNER JOIN postes p ON p.id = c.poste_id
+       WHERE p.evenement_id = ? ${creneauFilterSql}`,
+      [evId, ...creneauFilterParams]
     );
 
     const [postesRaw] = await pool.query(
@@ -460,10 +514,12 @@ router.get("/", async (req, res) => {
        FROM postes p
        JOIN creneaux c ON c.poste_id = p.id
        LEFT JOIN (SELECT creneau_id, COUNT(*) as n FROM inscriptions GROUP BY creneau_id) nb ON nb.creneau_id = c.id
-       ORDER BY p.titre, c.date_debut`
+       WHERE p.evenement_id = ?
+       ORDER BY p.titre, c.date_debut`,
+      [evId]
     );
 
-    const [postesAll] = await pool.query("SELECT id, titre FROM postes ORDER BY titre");
+    const [postesAll] = await pool.query("SELECT id, titre FROM postes WHERE evenement_id = ? ORDER BY titre", [evId]);
     const postes = postesAll.map((p) => ({ id: p.id, titre: p.titre }));
 
     const postesAgg = {};
@@ -492,9 +548,9 @@ router.get("/", async (req, res) => {
        JOIN users u ON u.id = i.user_id
        JOIN creneaux c ON c.id = i.creneau_id
        JOIN postes p ON p.id = c.poste_id
-       WHERE 1=1 ${creneauFilterSql}
+       WHERE p.evenement_id = ? ${creneauFilterSql}
        ORDER BY u.nom, u.prenom, c.date_debut`,
-      creneauFilterParams
+      [evId, ...creneauFilterParams]
     );
 
     const benevolesMap = new Map();

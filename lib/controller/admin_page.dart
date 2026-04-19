@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../api/poste_service.dart';
 import '../model/poste.dart';
+import '../model/user.dart';
 import '../theme/app_theme.dart';
 
 class AdminPage extends StatefulWidget {
-  const AdminPage({super.key});
+  final User user;
+
+  const AdminPage({super.key, required this.user});
 
   @override
   State<AdminPage> createState() => _AdminPageState();
@@ -42,7 +45,7 @@ class _AdminPageState extends State<AdminPage> {
       _error = null;
     });
     try {
-      final r = await PosteService.getPostes();
+      final r = await PosteService.getPostesForManagement(widget.user.id);
       final data = r['data'] as List?;
       setState(() {
         _postes = (data ?? [])
@@ -81,6 +84,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _submit() async {
+    if (!widget.user.isAdmin && _editingPosteId == null) return;
     if (!_formKey.currentState!.validate()) return;
     if (_creneaux.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,9 +141,9 @@ class _AdminPageState extends State<AdminPage> {
             .toList(),
       };
       if (_editingPosteId != null) {
-        await PosteService.updatePoste(_editingPosteId!, payload);
+        await PosteService.updatePoste(widget.user.id, _editingPosteId!, payload);
       } else {
-        await PosteService.createPoste(payload);
+        await PosteService.createPoste(widget.user.id, payload);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,7 +193,7 @@ class _AdminPageState extends State<AdminPage> {
     );
     if (ok != true) return;
     try {
-      await PosteService.deletePoste(p.id!);
+      await PosteService.deletePoste(widget.user.id, p.id!);
       if (!mounted) return;
       _loadPostes();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -240,12 +244,20 @@ class _AdminPageState extends State<AdminPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Postes de bénévolat',
+              'Gestion des postes',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: AppColors.textPrimary,
                   ),
             ),
+            if (!widget.user.isAdmin && widget.user.isReferent) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Vous pouvez modifier uniquement les postes dont vous êtes référent.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
             const SizedBox(height: 24),
+            if (widget.user.isAdmin || _editingPosteId != null)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -492,7 +504,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 32),
+            if (widget.user.isAdmin || _editingPosteId != null) const SizedBox(height: 32),
             Text(
               'Postes existants',
               style: Theme.of(context).textTheme.titleLarge,
@@ -547,11 +559,12 @@ class _AdminPageState extends State<AdminPage> {
                             onPressed: () => _startEdit(p),
                             tooltip: 'Modifier',
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deletePoste(p),
-                            tooltip: 'Supprimer',
-                          ),
+                          if (widget.user.isAdmin)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _deletePoste(p),
+                              tooltip: 'Supprimer',
+                            ),
                         ],
                       ),
                     ),

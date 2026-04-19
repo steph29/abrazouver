@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../api/admin_users_service.dart';
+import '../api/poste_service.dart';
 import '../api/preferences_service.dart';
 import '../utils/logo_picker.dart';
 import '../model/user.dart';
@@ -30,6 +31,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   String? _error;
   List<Map<String, dynamic>> _adminUsers = [];
   bool _adminUsersLoading = false;
+  List<Map<String, dynamic>> _posteOptions = [];
 
   static const int _maxLogoBytes = 2 * 1024 * 1024; // 2 Mo
 
@@ -43,6 +45,23 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _accueilDescriptionController = TextEditingController();
     _loadPreferences();
     _loadAdminUsers();
+    _loadPosteOptions();
+  }
+
+  Future<void> _loadPosteOptions() async {
+    try {
+      final r = await PosteService.getPostes();
+      final data = r['data'] as List?;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _posteOptions = (data ?? []).map((e) {
+          final m = e as Map<String, dynamic>;
+          return {'id': m['id'], 'titre': m['titre']?.toString() ?? ''};
+        }).toList();
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadAdminUsers() async {
@@ -533,7 +552,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Accordez ou retirez le rôle admin aux utilisateurs inscrits. Les admins peuvent gérer postes, préférences, analyse et messages.',
+          'Accordez ou retirez le rôle admin, et définissez les postes dont chaque bénévole est référent (modification de ces postes uniquement).',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 12),
@@ -559,6 +578,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                 final id = (u['id'] as num?)?.toInt() ?? 0;
                 final isAdmin = u['isAdmin'] == true;
                 final isCurrentUser = id == widget.user.id;
+                final refIds = (u['referentPosteIds'] as List?) ?? [];
                 final name = '${u['prenom'] ?? ''} ${u['nom'] ?? ''}'.trim();
                 final email = u['email'] ?? '';
                 return ListTile(
@@ -570,10 +590,25 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     ),
                   ),
                   title: Text(name.isNotEmpty ? name : email),
-                  subtitle: email.isNotEmpty ? Text(email, style: const TextStyle(fontSize: 12)) : null,
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (email.isNotEmpty) Text(email, style: const TextStyle(fontSize: 12)),
+                      if (refIds.isNotEmpty)
+                        Text(
+                          'Référent : ${refIds.length} poste(s)',
+                          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                        ),
+                    ],
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        tooltip: 'Postes référent',
+                        icon: const Icon(Icons.assignment_ind_outlined),
+                        onPressed: () => _editReferentPostes(u),
+                      ),
                       if (isAdmin)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
@@ -599,6 +634,71 @@ class _PreferencesPageState extends State<PreferencesPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Future<void> _editReferentPostes(Map<String, dynamic> u) async {
+    final targetId = (u['id'] as num).toInt();
+    final initial = (u['referentPosteIds'] as List?)?.map((e) => (e as num).toInt()).toSet() ?? <int>{};
+    final selected = Set<int>.from(initial);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: Text('Référent — ${u['prenom'] ?? ''} ${u['nom'] ?? ''}'.trim()),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: _posteOptions.isEmpty
+                ? const Text('Aucun poste pour l’événement en cours.')
+                : ListView(
+                    shrinkWrap: true,
+                    children: _posteOptions.map((p) {
+                      final id = (p['id'] as num).toInt();
+                      return CheckboxListTile(
+                        value: selected.contains(id),
+                        onChanged: (v) {
+                          setDialog(() {
+                            if (v == true) {
+                              selected.add(id);
+                            } else {
+                              selected.remove(id);
+                            }
+                          });
+                        },
+                        title: Text(p['titre']?.toString() ?? ''),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  await AdminUsersService.setReferentPostes(widget.user.id, targetId, selected.toList());
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  await _loadAdminUsers();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Rôles référent enregistrés'), backgroundColor: AppColors.primary),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString().replaceAll('ApiException (400): ', '')),
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

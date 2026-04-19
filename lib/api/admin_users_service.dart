@@ -19,4 +19,13 @@ class AdminUsersService {
       extraHeaders: {'X-User-Id': adminUserId.toString()},
     );
   }
+
+  /// Postes dont l’utilisateur est référent (événement en cours).
+  static Future<void> setReferentPostes(int adminUserId, int targetUserId, List<int> posteIds) async {
+    await ApiService.put(
+      '/admin/users/$targetUserId/referent-postes',
+      {'posteIds': posteIds},
+      extraHeaders: {'X-User-Id': adminUserId.toString()},
+    );
+  }
 }

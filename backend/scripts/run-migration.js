@@ -137,6 +137,91 @@ async function runMigration(options = {}) {
         throw err;
       }
     }
+
+    // --- Événements (plusieurs par an, postes et préférences liés) ---
+    await conn
+      .query(
+        `CREATE TABLE IF NOT EXISTS evenements (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          nom VARCHAR(255) NOT NULL,
+          description TEXT,
+          date_debut DATETIME NOT NULL,
+          date_fin DATETIME NOT NULL,
+          annee INT NOT NULL,
+          notes_json MEDIUMTEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`
+      )
+      .catch(() => {});
+    await conn
+      .query(
+        `CREATE TABLE IF NOT EXISTS evenement_preferences (
+          evenement_id INT NOT NULL,
+          pref_key VARCHAR(100) NOT NULL,
+          pref_value MEDIUMTEXT,
+          PRIMARY KEY (evenement_id, pref_key),
+          CONSTRAINT fk_evenement_preferences_evenement FOREIGN KEY (evenement_id) REFERENCES evenements(id) ON DELETE CASCADE
+        )`
+      )
+      .catch(() => {});
+
+    await conn.query("ALTER TABLE postes ADD COLUMN evenement_id INT NULL").catch(() => {});
+
+    const [[evCountRow]] = await conn.query("SELECT COUNT(*) as n FROM evenements");
+    if (Number(evCountRow?.n || 0) === 0) {
+      const y = new Date().getFullYear();
+      const deb = `${y}-01-01 00:00:00`;
+      const fin = `${y}-12-31 23:59:59`;
+      await conn.query(
+        `INSERT INTO evenements (nom, description, date_debut, date_fin, annee, notes_json) VALUES (?, NULL, ?, ?, ?, '[]')`,
+        ["Événement principal", deb, fin, y]
+      );
+    }
+
+    const [[firstEv]] = await conn.query("SELECT id FROM evenements ORDER BY id ASC LIMIT 1");
+    const defaultEvId = firstEv?.id;
+    if (defaultEvId) {
+      await conn.query("UPDATE postes SET evenement_id = ? WHERE evenement_id IS NULL", [defaultEvId]).catch(() => {});
+      await conn.query("ALTER TABLE postes MODIFY COLUMN evenement_id INT NOT NULL").catch(() => {});
+      await conn
+        .query(
+          "ALTER TABLE postes ADD CONSTRAINT fk_postes_evenement FOREIGN KEY (evenement_id) REFERENCES evenements(id) ON DELETE RESTRICT"
+        )
+        .catch(() => {});
+      await conn.query("INSERT IGNORE INTO app_preferences (pref_key, pref_value) VALUES ('currentEvenementId', ?)", [
+        String(defaultEvId),
+      ]);
+
+      const [[prefCountRow]] = await conn.query(
+        "SELECT COUNT(*) as n FROM evenement_preferences WHERE evenement_id = ?",
+        [defaultEvId]
+      );
+      if (Number(prefCountRow?.n || 0) === 0) {
+        const [prefRows] = await conn.query(
+          "SELECT pref_key, pref_value FROM app_preferences WHERE pref_key IN ('primaryColor','secondaryColor','logo','contactEmail','accueilTitre','accueilDescription')"
+        );
+        for (const pr of prefRows) {
+          await conn.query(
+            "INSERT INTO evenement_preferences (evenement_id, pref_key, pref_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)",
+            [defaultEvId, pr.pref_key, pr.pref_value]
+          );
+        }
+      }
+    }
+
+    await conn
+      .query(
+        `CREATE TABLE IF NOT EXISTS referent_postes (
+          user_id INT NOT NULL,
+          poste_id INT NOT NULL,
+          PRIMARY KEY (user_id, poste_id),
+          CONSTRAINT fk_referent_postes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT fk_referent_postes_poste FOREIGN KEY (poste_id) REFERENCES postes(id) ON DELETE CASCADE
+        )`
+      )
+      .catch(() => {});
+
     if (verbose) console.log("   ✅ Schéma BDD appliqué.");
     return true;
   } finally {

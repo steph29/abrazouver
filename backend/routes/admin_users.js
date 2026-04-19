@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getPool } = require("../config/database");
+const { getCurrentEvenementId } = require("../utils/evenementContext");
 
 /** Vérifie que l'utilisateur est admin via X-User-Id */
 async function requireAdmin(req, res, next) {
@@ -25,7 +26,7 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-/** GET /api/admin/users - Liste de tous les utilisateurs inscrits (compte créé) + is_admin */
+/** GET /api/admin/users - Liste de tous les utilisateurs inscrits + is_admin + referentPosteIds */
 router.get("/", requireAdmin, async (req, res) => {
   try {
     const pool = await getPool();
@@ -34,14 +35,62 @@ router.get("/", requireAdmin, async (req, res) => {
        FROM users
        ORDER BY nom, prenom`
     );
+    const [rps] = await pool.query("SELECT user_id, poste_id FROM referent_postes");
+    const byUser = new Map();
+    for (const rp of rps) {
+      const uid = rp.user_id;
+      if (!byUser.has(uid)) byUser.set(uid, []);
+      byUser.get(uid).push(Number(rp.poste_id));
+    }
     const users = rows.map((r) => ({
       id: r.id,
       nom: r.nom,
       prenom: r.prenom,
       email: r.email,
       isAdmin: !!r.is_admin,
+      referentPosteIds: byUser.get(r.id) || [],
     }));
     res.json({ users });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/** PUT /api/admin/users/:id/referent-postes - Postes dont ce bénévole est référent (événement en cours) */
+router.put("/:id/referent-postes", requireAdmin, async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (Number.isNaN(targetId)) {
+      return res.status(400).json({ message: "ID invalide" });
+    }
+    const { posteIds } = req.body || {};
+    if (!Array.isArray(posteIds)) {
+      return res.status(400).json({ message: "posteIds (tableau) requis" });
+    }
+    const pool = await getPool();
+    const [[u]] = await pool.query("SELECT id FROM users WHERE id = ?", [targetId]);
+    if (!u) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+    const evId = await getCurrentEvenementId(pool);
+    if (!evId) {
+      return res.status(400).json({ message: "Aucun événement actif" });
+    }
+    const ids = [...new Set(posteIds.map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n)))];
+    if (ids.length > 0) {
+      const [valid] = await pool.query(
+        `SELECT id FROM postes WHERE evenement_id = ? AND id IN (${ids.map(() => "?").join(",")})`,
+        [evId, ...ids]
+      );
+      if (valid.length !== ids.length) {
+        return res.status(400).json({ message: "Certains postes sont invalides pour l'événement en cours" });
+      }
+    }
+    await pool.query("DELETE FROM referent_postes WHERE user_id = ?", [targetId]);
+    for (const pid of ids) {
+      await pool.query("INSERT INTO referent_postes (user_id, poste_id) VALUES (?, ?)", [targetId, pid]);
+    }
+    res.json({ success: true, referentPosteIds: ids });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

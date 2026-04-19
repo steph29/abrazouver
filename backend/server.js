@@ -15,6 +15,7 @@ const authRoutes = require("./routes/auth");
 const familyRoutes = require("./routes/family");
 const { router: twofaRoutes } = require("./routes/twofa");
 const { postesReadRouter, postesAdminRouter } = require("./routes/postes");
+const { requirePosteManagementAuth } = require("./middleware/posteManagementAuth");
 const { isAdmin } = require("./middleware/isAdmin");
 const inscriptionsRoutes = require("./routes/inscriptions");
 const preferencesRoutes = require("./routes/preferences");
@@ -22,6 +23,7 @@ const { contactRouter, contactAdminRouter } = require("./routes/contact");
 const analyseRoutes = require("./routes/analyse");
 const adminUsersRoutes = require("./routes/admin_users");
 const crudRoutes = require("./routes/crud");
+const { publicRouter: evenementsPublicRouter, adminRouter: evenementsAdminRouter } = require("./routes/evenements");
 const { getPool } = require("./config/database");
 const { hasSmtp } = require("./config/email");
 
@@ -80,8 +82,11 @@ app.use("/api/superadmin/tenants", tenantsRoutes);
 // Lecture publique (Places libres)
 app.use("/api/postes", postesReadRouter);
 
-// Admin (gestion postes/créneaux)
-app.use("/api/admin/postes", isAdmin, postesAdminRouter);
+app.use("/api/evenements", evenementsPublicRouter);
+app.use("/api/admin/evenements", evenementsAdminRouter);
+
+// Admin + référents (gestion postes/créneaux — X-User-Id requis)
+app.use("/api/admin/postes", requirePosteManagementAuth, postesAdminRouter);
 
 app.use("/api/benevoles/inscriptions", inscriptionsRoutes);
 app.use("/api/preferences", preferencesRoutes);

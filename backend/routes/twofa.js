@@ -4,6 +4,7 @@ const { getPool } = require('../config/database');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const jwt = require('jsonwebtoken');
+const { getReferentPosteIds } = require('../utils/userReferents');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'abrazouver-2fa-secret-change-in-production';
 
@@ -172,6 +173,7 @@ router.post('/verify', async (req, res) => {
     }
 
     const u = rows[0];
+    const referentPosteIds = await getReferentPosteIds(pool, u.id);
     res.json({
       id: u.id,
       email: u.email,
@@ -181,6 +183,7 @@ router.post('/verify', async (req, res) => {
       twoFactorEnabled: !!u.two_factor_enabled,
       isAdmin: !!u.is_admin,
       userWith: u.user_with != null ? u.user_with : null,
+      referentPosteIds,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
