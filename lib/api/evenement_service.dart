@@ -45,6 +45,7 @@ class EvenementService {
     DateTime? dateFin,
     int? annee,
     List<String>? notes,
+    List<Map<String, dynamic>>? retroplanning,
   }) async {
     final body = <String, dynamic>{};
     if (nom != null) body['nom'] = nom;
@@ -53,6 +54,7 @@ class EvenementService {
     if (dateFin != null) body['dateFin'] = dateFin.toUtc().toIso8601String();
     if (annee != null) body['annee'] = annee;
     if (notes != null) body['notes'] = notes;
+    if (retroplanning != null) body['retroplanning'] = retroplanning;
     return ApiService.put(
       '/admin/evenements/$id',
       body,

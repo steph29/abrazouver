@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/evenement_service.dart';
 import '../model/user.dart';
+import 'retroplanning_editor.dart';
 
 class EvenementsPage extends StatefulWidget {
   final User user;
@@ -247,6 +248,31 @@ class _EvenementsPageState extends State<EvenementsPage> {
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
+  int? _avancementPct(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.round().clamp(0, 100);
+    return int.tryParse(v.toString())?.clamp(0, 100);
+  }
+
+  void _openRetroplanning(Map<String, dynamic> ev) {
+    final id = (ev['id'] as num).toInt();
+    final raw = ev['retroplanning'];
+    final list = raw is List
+        ? raw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RetroplanningEditor(
+          userId: widget.user.id,
+          eventId: id,
+          eventName: ev['nom']?.toString() ?? '',
+          initialItems: list,
+          onSaved: _load,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -278,6 +304,7 @@ class _EvenementsPageState extends State<EvenementsPage> {
                     final ev = _evenements[i];
                     final id = (ev['id'] as num?)?.toInt();
                     final isCurrent = id != null && id == _currentId;
+                    final avancementPct = _avancementPct(ev['avancementPct']);
                     final notes = (ev['notes'] as List?) ?? [];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -287,6 +314,7 @@ class _EvenementsPageState extends State<EvenementsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
                                   child: Text(
@@ -294,6 +322,37 @@ class _EvenementsPageState extends State<EvenementsPage> {
                                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                                   ),
                                 ),
+                                if (avancementPct != null) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Chip(
+                                          label: Text(
+                                            '$avancementPct %',
+                                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        SizedBox(
+                                          width: 72,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(
+                                              value: avancementPct / 100.0,
+                                              minHeight: 6,
+                                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 if (isCurrent)
                                   Chip(
                                     label: const Text('En cours'),
@@ -337,6 +396,11 @@ class _EvenementsPageState extends State<EvenementsPage> {
                                     onPressed: () => _activate(id),
                                     child: const Text('Activer'),
                                   ),
+                                OutlinedButton.icon(
+                                  onPressed: () => _openRetroplanning(ev),
+                                  icon: const Icon(Icons.calendar_view_month, size: 18),
+                                  label: const Text('Rétroplanning'),
+                                ),
                                 OutlinedButton.icon(
                                   onPressed: () => _openEditor(existing: ev),
                                   icon: const Icon(Icons.edit, size: 18),

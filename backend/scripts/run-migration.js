@@ -210,6 +210,8 @@ async function runMigration(options = {}) {
       }
     }
 
+    await conn.query("ALTER TABLE evenements ADD COLUMN retroplanning_json MEDIUMTEXT NULL").catch(() => {});
+
     await conn
       .query(
         `CREATE TABLE IF NOT EXISTS referent_postes (
