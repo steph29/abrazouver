@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../api/auth_service.dart';
+import '../api/preferences_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/favicon_helper.dart';
+import '../utils/page_title.dart';
 import 'login_page.dart';
 
 class ResetPasswordPage extends StatefulWidget {
@@ -23,6 +26,22 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
   bool _success = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPageTitle();
+  }
+
+  Future<void> _loadPageTitle() async {
+    try {
+      final prefs = await PreferencesService.get();
+      final accueilTitre = (prefs['accueilTitre'] as String?)?.trim();
+      setPageTitle(accueilTitre != null && accueilTitre.isNotEmpty ? accueilTitre : 'Abrazouver');
+      final logo = prefs['logo'] as String?;
+      setFavicon(logo);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {

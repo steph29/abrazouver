@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/tenants_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/page_title.dart';
 
 /// Page de configuration des clients - accessible uniquement via app.admin.xxx
 class TenantsConfigPage extends StatefulWidget {
@@ -29,6 +30,12 @@ class _TenantsConfigPageState extends State<TenantsConfigPage> {
   String? _error;
   bool _testing = false;
   bool _provisioning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    setPageTitle('Abrazouver - Administration');
+  }
 
   @override
   void dispose() {

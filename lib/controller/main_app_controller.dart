@@ -11,6 +11,8 @@ import 'analyse_page.dart';
 import 'compte_page.dart';
 import 'contact_page.dart';
 import 'liens_utiles_page.dart';
+import '../utils/favicon_helper.dart';
+import '../utils/page_title.dart';
 import 'login_page.dart';
 import 'mes_postes_page.dart';
 import 'notifications_page.dart';
@@ -81,7 +83,10 @@ class _MainAppControllerState extends State<MainAppController> {
         _logoPreferencesLoaded = true;
         final logo = prefs['logo'] as String?;
         AppThemeScope.maybeOf(context)?.updateLogo(logo);
+        setFavicon(logo);
       }
+      final accueilTitre = (prefs['accueilTitre'] as String?)?.trim();
+      setPageTitle(accueilTitre != null && accueilTitre.isNotEmpty ? accueilTitre : 'Abrazouver');
     } catch (_) {}
   }
 
